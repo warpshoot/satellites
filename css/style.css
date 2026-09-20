@@ -629,21 +629,25 @@ input[type=range]::-moz-range-thumb {
 
 
 /* ---- 演奏の帯 ----
-   触っている間だけ効く倍率。パッチの値には触らないので、
-   ここを何度振っても配置は壊れない。保存もしない。
-   盤面を食わないよう、1本を1行に詰めてある。 */
+   触っている間だけ効いて、離すと効かない側へ寄り戻る。パッチの値には
+   触らないので、何度振っても配置は壊れない。保存もしない。
+   常時開いていると盤面を食うので、既定では見出しだけに畳んである。 */
 #perform {
   flex: 0 0 auto;
-  padding: 6px 12px 9px;
   border-top: 1px solid var(--line);
   background: rgba(10, 12, 18, 0.72);
 }
 
+/* 見出しそのものが開閉のボタン。細いので掴む幅は行いっぱいに取る。 */
 .perf-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
 }
 
 .perf-title {
@@ -652,7 +656,26 @@ input[type=range]::-moz-range-thumb {
   color: var(--dim);
 }
 
-.perf-head .chip { margin-left: auto; padding: 2px 10px; font-size: 10px; }
+.perf-mark {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--dim);
+}
+
+#perform.open .perf-title { color: var(--text); }
+
+.perf-body { display: none; }
+
+#perform.open .perf-body {
+  display: block;
+  padding: 0 12px 10px;
+}
+
+.perf-hold {
+  margin-top: 7px;
+  padding: 3px 12px;
+  font-size: 10px;
+}
 
 .rib {
   display: flex;
@@ -682,7 +705,7 @@ input[type=range]::-moz-range-thumb {
 .rib-track {
   position: relative;
   flex: 1 1 auto;
-  height: 24px;
+  height: 28px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
   touch-action: none;
@@ -692,10 +715,10 @@ input[type=range]::-moz-range-thumb {
 
 .rib-track.held { background: rgba(255, 255, 255, 0.09); }
 
-/* 戻ってくる場所の目印。位置は JS が刺す（灼くだけ左端に戻る）。 */
+/* 戻ってくる場所の目印。位置は JS が刺す。 */
 .rib-mid {
   position: absolute;
-  left: 50%;
+  left: 0;
   top: 4px;
   bottom: 4px;
   width: 1px;
@@ -706,7 +729,7 @@ input[type=range]::-moz-range-thumb {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(150, 178, 255, 0.18);
+  background: rgba(224, 119, 111, 0.22);
 }
 
 .rib-thumb {
@@ -716,8 +739,8 @@ input[type=range]::-moz-range-thumb {
   width: 3px;
   margin-left: -1.5px;
   border-radius: 2px;
-  background: #cfdcff;
-  box-shadow: 0 0 10px rgba(160, 190, 255, 0.5);
+  background: #f0cfc9;
+  box-shadow: 0 0 10px rgba(224, 119, 111, 0.55);
 }
 
 .rib-end {
@@ -731,4 +754,4 @@ input[type=range]::-moz-range-thumb {
 
 .rib-end.lo { left: 8px; }
 .rib-end.hi { right: 8px; }
-.rib.on .rib-val { color: #cfdcff; }
+.rib.on .rib-val { color: #f0cfc9; }

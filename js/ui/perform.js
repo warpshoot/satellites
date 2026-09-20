@@ -1,18 +1,16 @@
-// 演奏レイヤー。いくつものパラメータを1ジェスチャで同時に動かす帯。
+// 演奏レイヤー。触っている間だけ効いて、離すと効かない側へ寄り戻る帯。
 //
-// ここで動かすのはパッチの値ではなく、位置と時間に掛かる「倍率」。
-// 触っている間だけ効いて、離せば 1.0 に戻る。だから何をどう振っても
-// 配置は壊れないし、保存もしない（ソロ・ミュートと同じ扱い）。
+// パッチの値には触らないので、何度振っても配置は壊れないし保存もしない
+// （ソロ・ミュートと同じ扱い）。
 //
-// 引力は軌道と座標をまとめて縮める。核に近づくほど音量・ドライ・高域が
-// 上がるという既存の配線がそのまま動くので、ノブ1本で8点ぶんの
-// ミックスが動く。時間は周回の進み方そのものを伸び縮みさせる。
+// はじめは「時間」と「引力」も並べていたが外した。どちらも既にあるものを
+// 一様に拡大縮小するだけで、速いか遅いか・大きいか小さいかしか起きない。
+// 振っても音の性格が変わらないので、動かして面白くなかった。
+// ここに足すなら、量ではなく質を変えるものにすること。
+//
+// 常時開いていると盤面を食うので、既定では閉じておく。
 
 export const RIBBONS = [
-  // 時間と引力は対数で左右対称にしてある（min * max = 1）。真ん中が等倍。
-  { key: 'time', label: '時間', min: 0.2, max: 5, scale: 'log', rest: 1, lo: '遅い', hi: '速い' },
-  { key: 'gravity', label: '引力', min: 0.4, max: 2.5, scale: 'log', rest: 1, lo: '寄る', hi: '散る' },
-  // 灼きだけ戻る先が左端。効いていない状態が真ん中にあるのは嘘になる。
   { key: 'burn', label: '灼く', min: 0, max: 1, scale: 'lin', rest: 0, lo: '澄む', hi: '焦げる' }
 ];
 
@@ -33,33 +31,42 @@ function fromNorm(r, n) {
 export function createPerform(el, app) {
   const rows = new Map();
   let hold = false;
+  let open = false;
   let raf = null;
 
   el.innerHTML = '';
-  const head = document.createElement('div');
+
+  // 見出しそのものが開閉のボタン。細い帯なので、掴む幅は行いっぱいに取る。
+  const head = document.createElement('button');
+  head.type = 'button';
   head.className = 'perf-head';
   const title = document.createElement('span');
   title.className = 'perf-title';
   title.textContent = '演奏';
+  const mark = document.createElement('span');
+  mark.className = 'perf-mark';
   head.appendChild(title);
+  head.appendChild(mark);
+  el.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'perf-body';
+  el.appendChild(body);
 
   const holdBtn = document.createElement('button');
   holdBtn.type = 'button';
-  holdBtn.className = 'chip';
+  holdBtn.className = 'chip perf-hold';
   holdBtn.textContent = '固定';
   holdBtn.addEventListener('click', () => {
     hold = !hold;
     holdBtn.classList.toggle('on', hold);
     if (!hold) kick(); // 固定を解いたらその場で戻りはじめる
   });
-  head.appendChild(holdBtn);
-  el.appendChild(head);
 
   RIBBONS.forEach((r) => {
     const wrap = document.createElement('div');
     wrap.className = 'rib';
 
-    // 名前・トラック・値を1行に詰める。上下に積むと帯が太って盤面を食う。
     const name = document.createElement('span');
     name.className = 'rib-name';
     name.textContent = r.label;
@@ -88,23 +95,23 @@ export function createPerform(el, app) {
     track.appendChild(hi);
     wrap.appendChild(track);
     wrap.appendChild(val);
-    el.appendChild(wrap);
+    body.appendChild(wrap);
 
     // 戻る先の目印。ここが見えていないと、どこが「効いていない」か分からない。
     const restN = Math.min(1, Math.max(0, toNorm(r, r.rest)));
     mid.style.left = (restN * 100).toFixed(2) + '%';
 
-    const row = { r, track, fill, thumb, val, restN, active: false };
+    const row = { r, track, fill, thumb, val, restN, wrap, active: false };
     rows.set(r.key, row);
 
     function set(clientX) {
       const b = track.getBoundingClientRect();
-      const n = b.width > 0 ? (clientX - b.left) / b.width : 0.5;
+      const n = b.width > 0 ? (clientX - b.left) / b.width : 0;
       app.setPerf(r.key, fromNorm(r, n));
       paint(row);
     }
 
-    // 2本を別々の指で同時に掴める。ポインタごとに捕まえる。
+    // リボンごとにポインタを捕まえる。複数本でも別々の指で掴める。
     track.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       row.active = true;
@@ -126,6 +133,8 @@ export function createPerform(el, app) {
     track.addEventListener('pointercancel', release);
   });
 
+  body.appendChild(holdBtn);
+
   function paint(row) {
     const v = app.perf(row.r.key);
     const n = Math.min(1, Math.max(0, toNorm(row.r, v)));
@@ -136,10 +145,10 @@ export function createPerform(el, app) {
     row.fill.style.left = (a * 100).toFixed(2) + '%';
     row.fill.style.width = ((b - a) * 100).toFixed(2) + '%';
     row.val.textContent = row.r.scale === 'log' ? '×' + v.toFixed(2) : v.toFixed(2);
-    row.track.parentNode.classList.toggle('on', Math.abs(n - row.restN) > 0.01);
+    row.wrap.classList.toggle('on', Math.abs(n - row.restN) > 0.01);
   }
 
-  // 指を離したぶんを中央へ戻す。ぱちんと戻すと音が段差になるので、寄せていく。
+  // 指を離したぶんを戻す。ぱちんと戻すと音が段差になるので、寄せていく。
   function step() {
     raf = null;
     let moving = false;
@@ -162,10 +171,31 @@ export function createPerform(el, app) {
     if (raf == null) raf = requestAnimationFrame(step);
   }
 
+  // 閉じたら演奏はやめる。畳んだまま固定が効いていると、音だけ灼けたまま
+  // 戻す手が画面から消える。
+  function setOpen(next) {
+    open = !!next;
+    el.classList.toggle('open', open);
+    head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    mark.textContent = open ? '閉じる' : '開く';
+    if (!open) {
+      hold = false;
+      holdBtn.classList.remove('on');
+      for (const row of rows.values()) {
+        row.active = false;
+        row.track.classList.remove('held');
+      }
+      kick();
+    }
+  }
+
+  head.addEventListener('click', () => setOpen(!open));
+
   function render() {
     for (const row of rows.values()) paint(row);
   }
 
+  setOpen(false);
   render();
-  return { render };
+  return { render, setOpen };
 }

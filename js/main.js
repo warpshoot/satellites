@@ -37,32 +37,13 @@ export function setAspect(a) {
 }
 
 // ---- 演奏レイヤー -----------------------------------------------------
-// パッチの値ではなく、位置と時間に掛かる倍率。触っている間だけ効いて
-// 離すと 1.0 に戻る。保存しない（ソロ・ミュートと同じ理由）。
-const perf = { time: 1, gravity: 1, burn: 0 };
-
-// 核へ引き寄せるほど、潮汐で千切れはじめる。帯の「灼く」とは入口が2つ
-// あるだけで、行き先はひとつ（engine の灼き段）。
-// 等倍のときは 0 になるので、普通に置いて聴いているぶんには何も起きない。
-function burnAmount() {
-  const tidal = Math.min(1, Math.max(0, (0.62 - perf.gravity) / 0.22)) * 0.55;
-  return Math.min(1, perf.burn + tidal);
-}
-
-// 時間の倍率は currentTime に直接掛けられない。掛けると倍率を動かした
-// 瞬間に位相が飛ぶ。進んだぶんだけ倍率を掛けて積む、別の時計を持つ。
-let clockTime = 0;
-let clockRef = null;
-
-function clock() {
-  const raw = engine.ctx ? engine.ctx.currentTime : 0;
-  if (clockRef == null) { clockRef = raw; return clockTime; }
-  const dt = raw - clockRef;
-  clockRef = raw;
-  // 中断から戻ったときに currentTime が飛ぶことがある。跨いだぶんは捨てる。
-  if (dt > 0 && dt < 60) clockTime += dt * perf.time;
-  return clockTime;
-}
+// 触っている間だけ効いて、離すと戻る。保存しない（ソロ・ミュートと同じ理由）。
+//
+// 「時間」と「引力」もここに置いていたが、外した。どちらも既にあるものを
+// 一様に拡大縮小するだけで、速くなるか遅くなるか、大きくなるか小さくなるか
+// しか起きない。振っても音の性格が変わらないので、動かして面白くなかった。
+// 残したのは灼きだけ。ここに足すなら、量ではなく質を変えるものにすること。
+const perf = { burn: 0 };
 
 // 面から浮く量。盤面の横幅 1 に対してどれだけ動かすか。
 const Z_GAIN = 0.85;
@@ -133,23 +114,14 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 // 核は盤面のど真ん中に固定。動かないので、周回は常にここを回る。
 export const CENTER = { x: 0.5, y: 0.5 };
 
-// 引力は「核からの隔たり」に丸ごと掛かる。周回していてもいなくても同じ。
 function resolve(v, t) {
-  const g = perf.gravity;
   if (v.orbit) {
     // 半径はノブではなく「核からどれだけ離して置いたか」で決まる。
     // 盤面の外へ出る軌道もあるので、ここでは丸めない。丸めると距離が頭打ちになる。
     const o = orbitState(v, t);
-    return { x: CENTER.x + o.x * g, y: CENTER.y + o.y * g, zOff: o.z * g };
+    return { x: CENTER.x + o.x, y: CENTER.y + o.y, zOff: o.z };
   }
-  return { x: CENTER.x + (v.x - CENTER.x) * g, y: CENTER.y + (v.y - CENTER.y) * g, zOff: 0 };
-}
-
-// 画面に見えている点を、引力が掛かる前の座標へ戻す。
-// 掴んで動かすときは、見えている場所ではなく元の場所を書き換える。
-function unwarpPoint(x, y) {
-  const g = perf.gravity || 1;
-  return { x: CENTER.x + (x - CENTER.x) / g, y: CENTER.y + (y - CENTER.y) / g };
+  return { x: v.x, y: v.y, zOff: 0 };
 }
 
 // 核からの3次元距離。盤面は正方形でないので縦は縦横比で割って揃える。
@@ -201,7 +173,7 @@ const app = {
   canAdd: () => state.patch.voices.length < MAX_VOICES,
 
   resolved(v) {
-    return resolve(v, clock());
+    return resolve(v, engine.now());
   },
 
   // ---- 演奏レイヤー ---------------------------------------------------
@@ -210,10 +182,7 @@ const app = {
   setPerf(key, value) {
     if (!(key in perf) || !isFinite(value)) return;
     perf[key] = value;
-    // 時間は時計の進み方が変わるだけなので、位置を今すぐ引き直す必要はない。
-    // 引力は見えている位置そのものが動く。
-    if (key === 'gravity') perfApply();
-    if (key !== 'time' && engine.ready) engine.setBurn(burnAmount());
+    if (engine.ready) engine.setBurn(perf.burn);
   },
 
   effectivePos(v) {
@@ -274,12 +243,11 @@ const app = {
     if (!v.orbit) return null;
     const g = orbitGeom(v);
     if (g.rho < 0.004) return null;
-    const gr = perf.gravity;
     const pts = [];
     const steps = n || 96;
     for (let i = 0; i <= steps; i++) {
       const p = ellipsePoint(g.rho, v.orbitEcc || 0, v.orbitAngle || 0, v.orbitIncl || 0, (TAU * i) / steps);
-      pts.push({ x: CENTER.x + p.x * gr, y: CENTER.y + p.y * gr, dz: p.z * gr });
+      pts.push({ x: CENTER.x + p.x, y: CENTER.y + p.y, dz: p.z });
     }
     return pts;
   },
@@ -382,18 +350,16 @@ const app = {
   moveTo(id, x, y) {
     const v = findVoice(id);
     if (!v) return;
-    // 指が指しているのは引力の掛かった先。戻してから書き込む。
-    const u = unwarpPoint(x, y);
     if (v.orbit) {
-      const g = orbitFromPoint(v, u.x, u.y, clock());
+      const g = orbitFromPoint(v, x, y, engine.now());
       v.orbitRadius = g.rho;
       v.orbitPhase = g.phase;
       applyPos(v);
       field.layout();
       return;
     }
-    v.x = clamp01(u.x);
-    v.y = clamp01(u.y);
+    v.x = clamp01(x);
+    v.y = clamp01(y);
     applyPos(v);
     field.layout();
   },
@@ -430,7 +396,7 @@ const app = {
   toggleOrbit(id) {
     const v = findVoice(id);
     if (!v) return;
-    const t = clock();
+    const t = engine.now();
     if (!v.orbit) {
       // 入れた瞬間に飛ばないよう、いまの場所から半径と位相を割り出す
       const g = orbitFromPoint(v, v.x, v.y, t);
@@ -438,11 +404,10 @@ const app = {
       v.orbitPhase = g.phase;
       v.orbit = true;
     } else {
-      // 外すときは、いま見えている場所に置いていく（引力は戻してから）
+      // 外すときは、いま見えている場所に置いていく
       const pos = this.resolved(v);
-      const u = unwarpPoint(pos.x, pos.y);
-      v.x = clamp01(u.x);
-      v.y = clamp01(u.y);
+      v.x = clamp01(pos.x);
+      v.y = clamp01(pos.y);
       v.orbit = false;
     }
     applyPos(v);
@@ -566,7 +531,7 @@ const app = {
     if (!engine.ready) return;
     const m = state.patch.master;
     if (!paused) engine.setMasterGain(m.gain); // 停止中に音量を触っても鳴り出さない
-    engine.setBurn(burnAmount());
+    engine.setBurn(perf.burn);
     engine.setDelayTime(delayMs(m));
     engine.setDelayFeedback(m.delay.feedback);
     engine.setTuning(m.tuning);
@@ -596,19 +561,6 @@ function redraw() {
   field.render();
   panel.render();
   strip.render();
-}
-
-// 演奏レイヤーで位置が動いたときの引き直し。見た目は毎フレーム、
-// 音は間引く。8点 × パラメータ数の setTargetAtTime を 60Hz で撒かない。
-let perfAudioAt = 0;
-
-function perfApply() {
-  const now = performance.now();
-  if (now - perfAudioAt > 25) {
-    perfAudioAt = now;
-    for (const v of state.patch.voices) applyPos(v);
-  }
-  field.layout();
 }
 
 function applyAudible() {
@@ -690,7 +642,6 @@ window.addEventListener('hashchange', loadFromHash);
 
 // 周回の計算は 10Hz で十分。毎フレームは回さない。
 setInterval(() => {
-  clock(); // 止まっている間も時計は進めておく。再開で位相が飛ばないように。
   const orbiting = state.patch.voices.some((v) => v.orbit);
   const camMoving = field.stepCamera();
   if (!orbiting && !camMoving) return;
