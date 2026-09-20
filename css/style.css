@@ -567,10 +567,23 @@ input[type=range]::-moz-range-thumb {
   border-radius: 999px;
 }
 
+/* 横長のときは盤面を左、帯とパネルを右に積む。
+   flex-direction: row にすると、横並び前提で作った星の帯が
+   盤面とパネルの間に「列」として挟まって、真ん中に浮く。 */
 @media (min-aspect-ratio: 1/1) {
-  #app { flex-direction: row; }
-  #field { flex: 1 1 auto; border-bottom: 0; border-right: 1px solid var(--line); }
-  #panel { flex: 0 0 340px; }
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  #field {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    border-bottom: 0;
+    border-right: 1px solid var(--line);
+  }
+  #stars { grid-column: 2; grid-row: 1; }
+  #panel { grid-column: 2; grid-row: 2; min-height: 0; }
 }
 
 .patch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
