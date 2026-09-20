@@ -1,4 +1,4 @@
-import { MASTER_PARAMS, getPath, setPath } from '../state.js';
+import { MASTER_GROUPS, getPath, setPath } from '../state.js';
 
 export function renderMaster(el, app, ui) {
   const head = document.createElement('div');
@@ -10,41 +10,44 @@ export function renderMaster(el, app, ui) {
   head.appendChild(name);
   const hint = document.createElement('span');
   hint.className = 'panel-hint';
-  hint.textContent = '盤面の点をタップすると音色';
+  hint.textContent = '星をタップすると音色';
   head.appendChild(hint);
   el.appendChild(head);
 
-  const sec = ui.section('マスターFX');
-  MASTER_PARAMS.forEach((p) => {
-    const value = getPath(app.master(), p.path);
-    sec.appendChild(
-      ui.buildControl(
-        p,
-        value,
-        (val) => {
-          setPath(app.master(), p.path, val);
-          if (p.visual) return app.refreshField(); // 音ではなく見た目の設定
-          // IR の再生成は音が途切れる。ドラッグ中は触らない。
-          if (!p.deferred) app.applyMaster();
-        },
-        (val) => {
-          setPath(app.master(), p.path, val);
-          if (p.visual) app.refreshField();
-          else app.applyMaster(p.deferred);
-          app.commit();
-        }
-      )
-    );
+  // 機能ごとに切る。音の設定と見た目の設定を同じ列に並べない。
+  MASTER_GROUPS.forEach((g) => {
+    const sec = ui.section(g.title);
+    g.params.forEach((p) => {
+      const value = getPath(app.master(), p.path);
+      sec.appendChild(
+        ui.buildControl(
+          p,
+          value,
+          (val) => {
+            setPath(app.master(), p.path, val);
+            if (p.visual) return app.refreshField(); // 音ではなく見た目の設定
+            // IR の再生成は音が途切れる。ドラッグ中は触らない。
+            if (!p.deferred) app.applyMaster();
+          },
+          (val) => {
+            setPath(app.master(), p.path, val);
+            if (p.visual) app.refreshField();
+            else app.applyMaster(p.deferred);
+            app.commit();
+          }
+        )
+      );
+    });
+    el.appendChild(sec);
   });
-  el.appendChild(sec);
   el.appendChild(presetSection(app, ui));
   el.appendChild(patchSection(app, ui));
 }
 
-// はじめから入っている配置。上書きの前に必ず退避を取るので、
+// プリセット。上書きの前に必ず退避を取るので、
 // 押し間違えても「前の配置に戻す」で帰ってこられる。
 function presetSection(app, ui) {
-  const sec = ui.section('はじめから入っている配置');
+  const sec = ui.section('プリセット');
   const row = document.createElement('div');
   row.className = 'patch-row';
   app.presets().forEach((name, i) => {
@@ -66,7 +69,7 @@ function patchSection(app, ui) {
   const box = document.createElement('textarea');
   box.className = 'patch-box hidden';
   box.setAttribute('spellcheck', 'false');
-  box.placeholder = 'ここにリンクか JSON を貼り付ける';
+  box.placeholder = 'リンクか JSON を貼り付け';
 
   const file = document.createElement('input');
   file.type = 'file';
@@ -102,8 +105,8 @@ function patchSection(app, ui) {
   };
 
   sec.appendChild(row(
-    btn('ファイルに書き出す', '', () => app.saveFile()),
-    btn('ファイルから読む', '', () => file.click())
+    btn('書き出す', '', () => app.saveFile()),
+    btn('読み込む', '', () => file.click())
   ));
 
   sec.appendChild(row(
@@ -117,15 +120,15 @@ function patchSection(app, ui) {
     })
   ));
 
-  const loadBtn = btn('貼り付けたものを読む', '', async () => {
+  const loadBtn = btn('貼り付けを読む', '', async () => {
     if (box.classList.contains('hidden') || !box.value.trim()) {
-      return showBox('', 'ここにリンクか JSON を貼り付ける');
+      return showBox('', 'リンクか JSON を貼り付け');
     }
     if (await app.loadText(box.value)) box.value = '';
   });
   const kids = [loadBtn];
   if (app.hasBackup()) {
-    kids.push(btn('前の配置に戻す', 'danger', () => app.restoreBackup()));
+    kids.push(btn('元に戻す', 'danger', () => app.restoreBackup()));
   }
   sec.appendChild(row.apply(null, kids));
 

@@ -113,7 +113,7 @@ export function createField(el, app) {
   const soloBar = document.createElement('button');
   soloBar.className = 'solo-bar hidden';
   soloBar.type = 'button';
-  soloBar.textContent = 'ソロ中 · 解除';
+  soloBar.textContent = 'ソロ解除';
   soloBar.addEventListener('click', (e) => {
     e.stopPropagation();
     app.clearSolo();

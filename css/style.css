@@ -496,6 +496,21 @@ input[type=range]::-moz-range-thumb {
 
 .seg button.on { color: #08090c; background: #e8eaee; border-color: #e8eaee; }
 
+/* 形の選択。塗り潰すと印そのものが読めなくなるので、枠で選択を示す。 */
+.seg-look button { display: grid; place-items: center; padding: 10px 12px; }
+.seg-look button.on {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+/* 周回 OFF のときの軌道。行は残したまま触れなくする（消すと高さが跳ねる） */
+.ctrl.disabled { opacity: 0.3; }
+.ctrl.disabled input[type=range],
+.ctrl.disabled .seg { pointer-events: none; }
+
+.ctrl-head label { cursor: pointer; }
+
 .solo-bar {
   position: absolute;
   left: 50%;

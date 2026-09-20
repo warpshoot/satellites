@@ -405,7 +405,7 @@ const app = {
     save();
   },
 
-  // ---- はじめから入っている配置 --------------------------------------
+  // ---- プリセット ----------------------------------------------------
   presets: () => PRESETS.map((x) => x.name),
 
   loadPreset(i) {
@@ -446,7 +446,7 @@ const app = {
   async copyPatch() {
     const text = patchText(state.patch);
     const ok = await copyText(text);
-    this.notice(ok ? 'コピーした' : 'コピーできなかった');
+    this.notice(ok ? 'コピーした' : 'コピーできない');
     return ok ? null : text; // 失敗したら呼んだ側が手で選ばせる
   },
 
@@ -454,10 +454,10 @@ const app = {
     try {
       const url = await patchLink(state.patch);
       const ok = await copyText(url);
-      this.notice(ok ? 'リンクをコピーした' : 'コピーできなかった');
+      this.notice(ok ? 'リンクをコピーした' : 'コピーできない');
       return ok ? null : url;
     } catch (e) {
-      this.notice('リンクを作れなかった');
+      this.notice('リンクを作れない');
       return null;
     }
   },
@@ -468,7 +468,7 @@ const app = {
     try {
       raw = await parseIncoming(text);
     } catch (e) {
-      this.notice('読めなかった');
+      this.notice('読めない');
       return false;
     }
     backupCurrent();
@@ -484,7 +484,7 @@ const app = {
       const name = savePatchFile(state.patch);
       this.notice(name + ' を書き出した');
     } catch (e) {
-      this.notice('書き出せなかった');
+      this.notice('書き出せない');
     }
   },
 
@@ -493,7 +493,7 @@ const app = {
     try {
       raw = await readPatchFile(file);
     } catch (e) {
-      this.notice('ファイルを読めなかった');
+      this.notice('ファイルを読めない');
       return false;
     }
     backupCurrent();
@@ -506,11 +506,11 @@ const app = {
 
   restoreBackup() {
     const raw = takeBackup();
-    if (!raw) return this.notice('戻す先が無い');
+    if (!raw) return this.notice('戻す先がない');
     setPatch(raw);
     swapVoices();
     save();
-    this.notice('前の配置に戻した');
+    this.notice('元に戻した');
   },
 
   sky: () => state.patch.master.sky,
@@ -626,9 +626,9 @@ async function loadFromHash() {
     setPatch(raw);
     save();
     swapVoices();
-    app.notice('リンクの配置を読み込んだ');
+    app.notice('リンクを読み込んだ');
   } catch (e) {
-    app.notice('リンクを読めなかった');
+    app.notice('リンクを読めない');
   }
 }
 
@@ -680,7 +680,7 @@ function running() {
 function showGate(mode) {
   if (mode === 'resume') {
     gateTitle.textContent = 'SATELLITES';
-    gateText.innerHTML = '音が止まっている<br>バックグラウンドに回ると止まる';
+    gateText.textContent = '音が止まっている';
     gateCta.textContent = 'タップして再開';
   }
   gateEl.classList.remove('gone');

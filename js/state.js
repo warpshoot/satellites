@@ -7,14 +7,15 @@ const KEY = 'satellites.patch.v1';
 const OLD_KEY = 'drift.patch.v1'; // DRIFT 時代の保存を引き継ぐ
 const VERSION = 3;
 
-// 周回するときだけ意味を持つ
+// 周回するときだけ意味を持つ。周回 OFF でも並びからは消さず、触れなくするだけ。
+// 消すと行数が変わってパネルが跳ね、何が隠れているかも分からなくなる。
 export const ORBIT_PARAMS = [
-  { key: 'orbitPeriod', label: '周期', min: 5, max: 600, scale: 'log', unit: 's' },
-  { key: 'orbitRadius', label: '軌道の大きさ', min: 0.02, max: 2, scale: 'log' },
-  { key: 'orbitEcc', label: 'つぶれ具合（0 = 正円）', min: 0, max: 0.9, scale: 'pow' },
-  { key: 'orbitAngle', label: '軌道の向き', min: 0, max: 360, scale: 'lin', unit: '°' },
-  { key: 'orbitIncl', label: '軌道の傾斜（倒すと立体になる）', min: 0, max: 90, scale: 'lin', unit: '°' },
-  { key: 'orbitDir', label: '回り方', type: 'select', options: ['prograde', 'retrograde'], labels: { prograde: '順行', retrograde: '逆行' } }
+  { key: 'orbitPeriod', label: '周期', min: 5, max: 600, scale: 'log', unit: 's', def: 60 },
+  { key: 'orbitRadius', label: '半径', min: 0.02, max: 2, scale: 'log', def: 0.3 },
+  { key: 'orbitEcc', label: '離心率', min: 0, max: 0.9, scale: 'pow', def: 0 },
+  { key: 'orbitAngle', label: '向き', min: 0, max: 360, scale: 'lin', unit: '°', def: 0 },
+  { key: 'orbitIncl', label: '傾斜', min: 0, max: 90, scale: 'lin', unit: '°', def: 0 },
+  { key: 'orbitDir', label: '方向', type: 'select', options: ['prograde', 'retrograde'], labels: { prograde: '順行', retrograde: '逆行' } }
 ];
 
 export const MASTER_DEFAULTS = {
@@ -29,22 +30,53 @@ export const MASTER_DEFAULTS = {
   follow: false // 選んだ星を画面の中心に置くか
 };
 
-export const MASTER_PARAMS = [
-  { path: 'gain', label: 'マスター音量', min: 0, max: 1, scale: 'lin' },
-  { path: 'tuning.root', label: '基音', type: 'select', options: ROOTS },
-  { path: 'tuning.scale', label: '音階', type: 'select', options: SCALE_IDS, labels: SCALE_LABELS },
-  { path: 'reverb.length', label: 'リバーブ長さ', min: 0.5, max: 15, scale: 'log', unit: 's', deferred: true },
-  { path: 'reverb.decay', label: 'リバーブ減衰', min: 1, max: 6, scale: 'lin', deferred: true },
-  { path: 'delay.time', label: 'ディレイ時間', min: 50, max: 2000, scale: 'log', unit: 'ms' },
-  { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'pow' },
-  { path: 'delay.sync', label: 'ディレイを周回に合わせる', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } },
-  { path: 'burn', label: '灼き（歪み）', min: 0, max: 1, scale: 'lin' },
-  { path: 'pulse', label: '音に合わせて星を動かす', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } },
-  { path: 'sky', label: '背景の星', type: 'select', options: SKY_STYLES, labels: SKY_LABELS, visual: true },
-  { path: 'follow', label: '選んだ星を中心に置く', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' }, visual: true }
+const ONOFF = { type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } };
+
+// マスターは機能ごとに束ねる。セクションの見出しが文脈を持つので、
+// ラベル側で「リバーブ長さ」のように繰り返さない。
+export const MASTER_GROUPS = [
+  {
+    title: '出力',
+    params: [
+      { path: 'gain', label: '音量', min: 0, max: 1, scale: 'lin', def: MASTER_DEFAULTS.gain },
+      { path: 'burn', label: 'サチュレーション', min: 0, max: 1, scale: 'lin', def: MASTER_DEFAULTS.burn }
+    ]
+  },
+  {
+    title: 'キー',
+    params: [
+      { path: 'tuning.root', label: 'ルート', type: 'select', options: ROOTS },
+      { path: 'tuning.scale', label: 'スケール', type: 'select', options: SCALE_IDS, labels: SCALE_LABELS }
+    ]
+  },
+  {
+    title: 'リバーブ',
+    params: [
+      { path: 'reverb.length', label: '長さ', min: 0.5, max: 15, scale: 'log', unit: 's', deferred: true, def: MASTER_DEFAULTS.reverb.length },
+      { path: 'reverb.decay', label: '減衰', min: 1, max: 6, scale: 'lin', deferred: true, def: MASTER_DEFAULTS.reverb.decay }
+    ]
+  },
+  {
+    title: 'ディレイ',
+    params: [
+      { path: 'delay.time', label: 'タイム', min: 50, max: 2000, scale: 'log', unit: 'ms', def: MASTER_DEFAULTS.delay.time },
+      { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'pow', def: MASTER_DEFAULTS.delay.feedback },
+      Object.assign({ path: 'delay.sync', label: '軌道に同期' }, ONOFF)
+    ]
+  },
+  {
+    title: '表示',
+    params: [
+      Object.assign({ path: 'pulse', label: 'パルス' }, ONOFF),
+      { path: 'sky', label: '背景', type: 'select', options: SKY_STYLES, labels: SKY_LABELS, visual: true },
+      Object.assign({ path: 'follow', label: '追尾', visual: true }, ONOFF)
+    ]
+  }
 ];
 
-export const LOOK_PARAM = { key: 'look', label: '見た目', type: 'select', options: LOOK_IDS, labels: LOOK_LABELS };
+export const MASTER_PARAMS = MASTER_GROUPS.flatMap((g) => g.params);
+
+export const LOOK_PARAM = { key: 'look', label: '形', type: 'select', options: LOOK_IDS, labels: LOOK_LABELS, look: true };
 
 export function getPath(obj, path) {
   return path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);

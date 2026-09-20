@@ -1,12 +1,22 @@
 // Voice の共通インターフェース: start() / stop() / setParam() / dispose() / output
 
-export const COMMON_PARAMS = [
+// 共通パラメータは機能で束ねる。パネルはこの束ごとにセクションを立てるので、
+// 並び順を変えたければここを触る（画面側に順番を持たせない）。
+export const ENV_PARAMS = [
   { key: 'attack', label: 'アタック', min: 0.01, max: 20, scale: 'log', unit: 's' },
-  { key: 'release', label: 'リリース', min: 0.01, max: 30, scale: 'log', unit: 's' },
-  { key: 'drift', label: 'ゆらぎ', min: 0, max: 1, scale: 'pow' },
+  { key: 'release', label: 'リリース', min: 0.01, max: 30, scale: 'log', unit: 's' }
+];
+
+export const MOTION_PARAMS = [
+  { key: 'drift', label: 'ドリフト', min: 0, max: 1, scale: 'pow' }
+];
+
+export const MIX_PARAMS = [
   { key: 'reverbSend', label: 'リバーブ', min: 0, max: 1, scale: 'pow' },
   { key: 'delaySend', label: 'ディレイ', min: 0, max: 1, scale: 'pow' }
 ];
+
+export const COMMON_PARAMS = [...ENV_PARAMS, ...MOTION_PARAMS, ...MIX_PARAMS];
 
 export const COMMON_DEFAULTS = {
   attack: 2.0,

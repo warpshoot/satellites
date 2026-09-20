@@ -80,12 +80,12 @@ export class GrainVoice extends Voice {
   static params = [
     // 放置して聴くものなので、上は「30 秒に 1 回ポーンと鳴る」まで開けてある。
     { key: 'interval', label: '間隔', min: 0.05, max: 30, scale: 'log', unit: 's' },
-    { key: 'jitter', label: '間隔のばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
+    { key: 'jitter', label: 'ばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
     { key: 'grainLen', label: '粒の長さ', min: 20, max: 2000, scale: 'log', unit: 'ms' },
-    { key: 'shape', label: '粒の形（0 = 吸う / 1 = 弾く）', min: 0, max: 1, scale: 'lin' },
-    { key: 'center', label: '音程中心', min: 100, max: 4000, scale: 'log', unit: 'Hz' },
-    { key: 'spread', label: '音程幅', min: 0, max: 2400, scale: 'pow', unit: 'cent' },
-    { key: 'width', label: '定位のばらつき', min: 0, max: 1, scale: 'lin' },
+    { key: 'shape', label: '粒の形', min: 0, max: 1, scale: 'lin' },
+    { key: 'center', label: 'ピッチ', min: 100, max: 4000, scale: 'log', unit: 'Hz' },
+    { key: 'spread', label: 'ピッチ幅', min: 0, max: 2400, scale: 'pow', unit: 'cent' },
+    { key: 'width', label: 'ステレオ幅', min: 0, max: 1, scale: 'lin' },
     { key: 'wave', label: '波形', type: 'select', options: ['sine', 'triangle', 'noise'] }
   ];
 

@@ -1,14 +1,19 @@
-import { COMMON_PARAMS } from '../audio/voices/base.js';
+import { ENV_PARAMS, MOTION_PARAMS, MIX_PARAMS, COMMON_DEFAULTS } from '../audio/voices/base.js';
 import { ORBIT_PARAMS, LOOK_PARAM } from '../state.js';
 import { VOICE_TYPES } from '../audio/voices/registry.js';
+import { lookOf, LOOK_IDS } from './looks.js';
 
 const TYPE_PARAM = {
   key: 'type',
-  label: '音源',
+  label: '種類',
   type: 'select',
   options: VOICE_TYPES.map((V) => V.type),
   labels: VOICE_TYPES.reduce((m, V) => { m[V.type] = V.label; return m; }, {})
 };
+
+const VOL_PARAM = { key: 'vol', label: '音量', min: 0, max: 1, scale: 'lin', def: 0.85 };
+const ORBIT_SWITCH = { key: 'orbit', label: '周回', type: 'select', options: ['OFF', 'ON'] };
+
 import { renderMaster } from './master.js';
 
 // 0 から始まるノブは log を通せない（log 0 が無い）。かといって lin だと、
@@ -56,13 +61,29 @@ export function fmt(p, v) {
   return s + (p.unit ? ' ' + p.unit : '');
 }
 
+let ctrlSeq = 0;
+
+// 形の選択だけは、記号（A〜F）ではなく形そのものを並べる。
+// 押すまで何が起きるか分からない札に、意味のない名前を付けない。
+function lookSwatch(id) {
+  const mark = document.createElement('span');
+  const look = lookOf(id);
+  mark.className = 'star-mark';
+  for (const l of LOOK_IDS) mark.classList.toggle('look-' + l, look.id === l);
+  mark.style.setProperty('--c', look.c);
+  return mark;
+}
+
 // スライダ1本。onInput は常時、onCommit は指を離したときだけ。
-export function buildControl(p, value, onInput, onCommit) {
+// opts.disabled で触れなくする（並びからは消さない）。
+export function buildControl(p, value, onInput, onCommit, opts) {
+  const o = opts || {};
+  const def = o.def != null ? o.def : p.def;
   const row = document.createElement('div');
-  row.className = 'ctrl';
+  row.className = 'ctrl' + (o.disabled ? ' disabled' : '');
   const head = document.createElement('div');
   head.className = 'ctrl-head';
-  const name = document.createElement('span');
+  const name = document.createElement('label');
   name.textContent = p.label;
   const val = document.createElement('span');
   val.className = 'ctrl-val';
@@ -73,14 +94,28 @@ export function buildControl(p, value, onInput, onCommit) {
   if (p.type === 'select') {
     val.textContent = '';
     const group = document.createElement('div');
-    group.className = 'seg';
+    group.className = 'seg' + (p.look ? ' seg-look' : '');
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', p.label);
     p.options.forEach((opt) => {
       const b = document.createElement('button');
-      b.textContent = p.labels ? p.labels[opt] : opt;
+      b.type = 'button';
+      if (p.look) {
+        b.appendChild(lookSwatch(opt));
+        b.setAttribute('aria-label', String(p.labels ? p.labels[opt] : opt));
+      } else {
+        b.textContent = p.labels ? p.labels[opt] : opt;
+      }
       b.className = opt === value ? 'on' : '';
+      b.disabled = !!o.disabled;
+      b.setAttribute('aria-pressed', String(opt === value));
       b.addEventListener('click', () => {
-        group.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
+        group.querySelectorAll('button').forEach((x) => {
+          x.classList.remove('on');
+          x.setAttribute('aria-pressed', 'false');
+        });
         b.classList.add('on');
+        b.setAttribute('aria-pressed', 'true');
         onInput(opt);
         if (onCommit) onCommit(opt);
       });
@@ -92,20 +127,48 @@ export function buildControl(p, value, onInput, onCommit) {
 
   const input = document.createElement('input');
   input.type = 'range';
+  input.id = 'ctrl-' + (++ctrlSeq);
+  name.setAttribute('for', input.id);
   input.min = 0;
   input.max = 1000;
   input.step = 1;
+  input.disabled = !!o.disabled;
   input.value = Math.round(Math.min(1, Math.max(0, toNorm(p, value))) * 1000);
   val.textContent = fmt(p, value);
+  input.setAttribute('aria-valuetext', val.textContent);
   input.addEventListener('input', () => {
     const v = fromNorm(p, input.value / 1000);
     val.textContent = fmt(p, v);
+    input.setAttribute('aria-valuetext', val.textContent);
     onInput(v);
   });
   const commit = () => {
     if (onCommit) onCommit(fromNorm(p, input.value / 1000));
   };
   input.addEventListener('change', commit);
+
+  // ダブルタップで既定値に戻す。一度動かしたノブを戻せないと、
+  // 試しに動かすこと自体が怖くなる。
+  if (def != null) {
+    input.title = 'ダブルタップで既定値';
+    let last = 0;
+    input.addEventListener('pointerdown', () => {
+      const t = performance.now();
+      if (t - last < 320) {
+        last = 0;
+        // pointerdown の直後に届く input（押した位置の値）を上書きする
+        setTimeout(() => {
+          input.value = Math.round(Math.min(1, Math.max(0, toNorm(p, def))) * 1000);
+          val.textContent = fmt(p, def);
+          input.setAttribute('aria-valuetext', val.textContent);
+          onInput(def);
+          if (onCommit) onCommit(def);
+        }, 0);
+      } else {
+        last = t;
+      }
+    });
+  }
   row.appendChild(input);
   return row;
 }
@@ -173,7 +236,7 @@ export function createPanel(el, app) {
     // 音作りの当てが無くても手が動くように。刻み方に沿って振る。
     const dice = document.createElement('button');
     dice.className = 'chip';
-    dice.textContent = 'サイコロ';
+    dice.textContent = 'ランダム';
     dice.addEventListener('click', () => app.randomize(v.id));
     head.appendChild(dice);
 
@@ -190,55 +253,56 @@ export function createPanel(el, app) {
     head.appendChild(del);
     el.appendChild(head);
 
-    const common = section('共通');
-
-    common.appendChild(
-      buildControl(TYPE_PARAM, v.type, (val) => app.setType(v.id, val))
-    );
-    common.appendChild(
-      buildControl(LOOK_PARAM, v.look, (val) => app.setLook(v.id, val))
-    );
-    common.appendChild(
-      buildControl(
-        { key: 'vol', label: '音量', min: 0, max: 1, scale: 'lin' },
-        v.vol,
-        (val) => app.setVolume(v.id, val),
-        () => app.commit()
-      )
-    );
-
-    // 周回するかしないか。他のパラメータと同じ顔をした選択行にしてある。
-    common.appendChild(
-      buildControl(
-        { key: 'orbit', label: '周回', type: 'select', options: ['OFF', 'ON'] },
-        v.orbit ? 'ON' : 'OFF',
-        (val) => {
-          if ((val === 'ON') !== !!v.orbit) app.toggleOrbit(v.id);
-        }
-      )
-    );
-    if (v.orbit) {
-      ORBIT_PARAMS.forEach((p) => {
-        const value = p.key === 'orbitRadius' ? app.orbitRadiusOf(v) : v[p.key];
-        common.appendChild(
-          buildControl(p, value, (val) => app.setOrbitParam(v.id, p.key, val), () => app.commit())
-        );
-      });
-    }
-    COMMON_PARAMS.forEach((p) => {
-      common.appendChild(
-        buildControl(p, v.common[p.key], (val) => app.setParam(v.id, p.key, val), () => app.commit())
-      );
-    });
-    el.appendChild(common);
+    // 並びは信号の流れ。音源 → 音色 → エンベロープ → 動き → ミックス。
+    // 一番よく触る種別固有のパラメータを最下段に置かない。
+    const src = section('音源');
+    src.appendChild(buildControl(TYPE_PARAM, v.type, (val) => app.setType(v.id, val)));
+    src.appendChild(buildControl(LOOK_PARAM, v.look, (val) => app.setLook(v.id, val)));
+    el.appendChild(src);
 
     const own = section(V.label);
     V.params.forEach((p) => {
       own.appendChild(
-        buildControl(p, v.params[p.key], (val) => app.setParam(v.id, p.key, val), () => app.commit())
+        buildControl(p, v.params[p.key], (val) => app.setParam(v.id, p.key, val), () => app.commit(),
+          { def: V.defaults[p.key] })
       );
     });
     el.appendChild(own);
+
+    const commonCtrl = (sec, p) => sec.appendChild(
+      buildControl(p, v.common[p.key], (val) => app.setParam(v.id, p.key, val), () => app.commit(),
+        { def: COMMON_DEFAULTS[p.key] })
+    );
+
+    const env = section('エンベロープ');
+    ENV_PARAMS.forEach((p) => commonCtrl(env, p));
+    el.appendChild(env);
+
+    const motion = section('動き');
+    MOTION_PARAMS.forEach((p) => commonCtrl(motion, p));
+    // 周回するかしないか。他のパラメータと同じ顔をした選択行にしてある。
+    motion.appendChild(
+      buildControl(ORBIT_SWITCH, v.orbit ? 'ON' : 'OFF', (val) => {
+        if ((val === 'ON') !== !!v.orbit) app.toggleOrbit(v.id);
+      })
+    );
+    // 周回 OFF でも軌道の行は残す。消すと押すたびに高さが跳ねる。
+    ORBIT_PARAMS.forEach((p) => {
+      const value = p.key === 'orbitRadius' ? app.orbitRadiusOf(v) : v[p.key];
+      motion.appendChild(
+        buildControl(p, value, (val) => app.setOrbitParam(v.id, p.key, val), () => app.commit(),
+          { def: p.def, disabled: !v.orbit })
+      );
+    });
+    el.appendChild(motion);
+
+    const mix = section('ミックス');
+    mix.appendChild(
+      buildControl(VOL_PARAM, v.vol, (val) => app.setVolume(v.id, val), () => app.commit(),
+        { def: VOL_PARAM.def })
+    );
+    MIX_PARAMS.forEach((p) => commonCtrl(mix, p));
+    el.appendChild(mix);
   }
 
   return { render };

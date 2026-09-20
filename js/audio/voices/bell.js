@@ -25,11 +25,11 @@ export class BellVoice extends Voice {
   };
   static params = [
     { key: 'interval', label: '間隔', min: 0.2, max: 30, scale: 'log', unit: 's' },
-    { key: 'jitter', label: '間隔のばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
-    { key: 'center', label: '音程中心', min: 80, max: 2000, scale: 'log', unit: 'Hz' },
-    { key: 'spread', label: '音程幅', min: 0, max: 2400, scale: 'pow', unit: 'cent' },
-    { key: 'ratio', label: '倍音の比', type: 'select', options: RATIOS, labels: RATIO_LABELS },
-    { key: 'index', label: '変調の深さ', min: 0, max: 10, scale: 'pow' },
+    { key: 'jitter', label: 'ばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
+    { key: 'center', label: 'ピッチ', min: 80, max: 2000, scale: 'log', unit: 'Hz' },
+    { key: 'spread', label: 'ピッチ幅', min: 0, max: 2400, scale: 'pow', unit: 'cent' },
+    { key: 'ratio', label: 'モジュレータ比', type: 'select', options: RATIOS, labels: RATIO_LABELS },
+    { key: 'index', label: 'モジュレーション', min: 0, max: 10, scale: 'pow' },
     { key: 'decay', label: '減衰', min: 0.2, max: 12, scale: 'log', unit: 's' },
     { key: 'width', label: '定位のばらつき', min: 0, max: 1, scale: 'lin' }
   ];

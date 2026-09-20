@@ -15,12 +15,12 @@ export class NoiseVoice extends Voice {
   static color = '#7fd6b5';
   static defaults = { center: 800, q: 2.0, swellDepth: 0.3, swellRate: 0.15, width: 0.8 };
   static params = [
-    { key: 'center', label: '帯域中心', min: 20, max: 12000, scale: 'log', unit: 'Hz' },
+    { key: 'center', label: '周波数', min: 20, max: 12000, scale: 'log', unit: 'Hz' },
     // Q=80 まで上げると、ノイズが「ほぼ音程」に化ける。makeup が √Q なので音量は揃う。
-    { key: 'q', label: '幅（Q）', min: 0.5, max: 100, scale: 'log' },
-    { key: 'swellDepth', label: 'うねり深さ', min: 0, max: 1, scale: 'pow' },
-    { key: 'swellRate', label: 'うねり速度', min: 0.02, max: 2, scale: 'log', unit: 'Hz' },
-    { key: 'width', label: '広がり', min: 0, max: 1, scale: 'lin' }
+    { key: 'q', label: 'レゾナンス', min: 0.5, max: 100, scale: 'log' },
+    { key: 'swellDepth', label: 'トレモロ深さ', min: 0, max: 1, scale: 'pow' },
+    { key: 'swellRate', label: 'トレモロ速度', min: 0.02, max: 2, scale: 'log', unit: 'Hz' },
+    { key: 'width', label: 'ステレオ幅', min: 0, max: 1, scale: 'lin' }
   ];
 
   build() {
