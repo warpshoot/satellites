@@ -71,7 +71,7 @@ export const MASTER_GROUPS = [
       { path: 'delay.time', label: 'タイム', min: 50, max: 2000, scale: 'log', unit: 'ms', def: MASTER_DEFAULTS.delay.time },
       { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'pow', def: MASTER_DEFAULTS.delay.feedback },
       { path: 'delay.tone', label: 'トーン', min: 0, max: 1, scale: 'lin', def: MASTER_DEFAULTS.delay.tone },
-      { path: 'delay.wow', label: 'ゆれ', min: 0, max: 1, scale: 'pow', def: MASTER_DEFAULTS.delay.wow },
+      { path: 'delay.wow', label: 'ドリフト', min: 0, max: 1, scale: 'pow', def: MASTER_DEFAULTS.delay.wow },
       Object.assign({ path: 'delay.sync', label: '軌道に同期' }, ONOFF)
     ]
   },

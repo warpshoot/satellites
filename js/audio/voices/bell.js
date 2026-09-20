@@ -25,13 +25,15 @@ export class BellVoice extends Voice {
     trigger: 'free', hits: 2
   };
   static params = [
+    // 鳴る時刻を何に従わせるか。先に決まらないと「間隔」と「分割」の
+    // どちらが生きているか分からないので、2本より上に置く。
+    { key: 'trigger', label: 'タイミング', type: 'select', options: ['free', 'orbit'],
+      labels: { free: 'フリー', orbit: '軌道' }, when: (v) => !!v.orbit },
+    // 軌道に従うときは位相から時刻を取る。刻み目の原点は近点なので、
+    // つぶれた軌道なら一番近づいた瞬間に鳴る。
     { key: 'interval', label: '間隔', min: 0.2, max: 30, scale: 'log', unit: 's',
       when: (v) => !(v.orbit && v.params.trigger === 'orbit') },
-    // 鳴る時刻を軌道の位相から取る。刻み目の原点は近点なので、つぶれた軌道なら
-    // 一番近づいた瞬間に鳴る。周回していない星では「間隔」へ落ちる。
-    { key: 'trigger', label: 'タイミング', type: 'select', options: ['free', 'orbit'],
-      labels: { free: '間隔', orbit: '軌道' }, when: (v) => !!v.orbit },
-    { key: 'hits', label: '1周の回数', min: 1, max: 8, scale: 'int', def: 2,
+    { key: 'hits', label: '分割', min: 1, max: 8, scale: 'int', def: 2,
       when: (v) => !!v.orbit && v.params.trigger === 'orbit' },
 
     { key: 'jitter', label: 'ばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
@@ -40,7 +42,7 @@ export class BellVoice extends Voice {
     { key: 'ratio', label: 'モジュレータ比', type: 'select', options: RATIOS, labels: RATIO_LABELS },
     { key: 'index', label: 'モジュレーション', min: 0, max: 10, scale: 'pow' },
     { key: 'decay', label: '減衰', min: 0.2, max: 12, scale: 'log', unit: 's' },
-    { key: 'width', label: '定位のばらつき', min: 0, max: 1, scale: 'lin' }
+    { key: 'width', label: 'ステレオ幅', min: 0, max: 1, scale: 'lin' }
   ];
 
   // 1発あたりオシレータ2本。長い減衰と短い間隔で簡単に重なる。

@@ -115,11 +115,13 @@ export class PluckVoice extends Voice {
     trigger: 'free', hits: 2
   };
   static params = [
+    // 鳴る時刻を何に従わせるか。先に決まらないと「間隔」と「分割」の
+    // どちらが生きているか分からないので、2本より上に置く。
+    { key: 'trigger', label: 'タイミング', type: 'select', options: ['free', 'orbit'],
+      labels: { free: 'フリー', orbit: '軌道' }, when: (v) => !!v.orbit },
     { key: 'interval', label: '間隔', min: 0.2, max: 30, scale: 'log', unit: 's',
       when: (v) => !(v.orbit && v.params.trigger === 'orbit') },
-    { key: 'trigger', label: 'タイミング', type: 'select', options: ['free', 'orbit'],
-      labels: { free: '間隔', orbit: '軌道' }, when: (v) => !!v.orbit },
-    { key: 'hits', label: '1周の回数', min: 1, max: 8, scale: 'int', def: 2,
+    { key: 'hits', label: '分割', min: 1, max: 8, scale: 'int', def: 2,
       when: (v) => !!v.orbit && v.params.trigger === 'orbit' },
     { key: 'jitter', label: 'ばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
     { key: 'center', label: 'ピッチ', min: 40, max: 2000, scale: 'log', unit: 'Hz', note: true },
@@ -127,7 +129,7 @@ export class PluckVoice extends Voice {
     { key: 'decay', label: '減衰', min: 0.2, max: 8, scale: 'log', unit: 's' },
     { key: 'damp', label: 'ダンプ', min: 0, max: 1, scale: 'lin' },
     { key: 'pick', label: 'ピック位置', min: 0.02, max: 0.5, scale: 'lin' },
-    { key: 'width', label: '定位のばらつき', min: 0, max: 1, scale: 'lin' }
+    { key: 'width', label: 'ステレオ幅', min: 0, max: 1, scale: 'lin' }
   ];
 
   build() {

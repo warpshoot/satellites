@@ -49,7 +49,7 @@ export function fromNorm(p, n) {
   return v;
 }
 
-// サイコロ用。刻み方に沿って振る。log のノブを lin で振ると毎回上限付近に寄って、
+// ランダム用。刻み方に沿って振る。log のノブを lin で振ると毎回上限付近に寄って、
 // 何度振っても同じ音しか出てこない。
 export function randomFor(p) {
   if (p.type === 'select') return p.options[Math.floor(Math.random() * p.options.length)];

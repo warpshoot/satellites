@@ -499,7 +499,7 @@ const app = {
     this.applyMaster(true);
     redraw();
     save();
-    this.notice('全部振った');
+    this.notice('全部ランダムにした');
   },
 
   // ---- 持ち出しと持ち込み -------------------------------------------
