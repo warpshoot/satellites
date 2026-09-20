@@ -21,7 +21,9 @@ const performEl = document.getElementById('perform');
 
 const live = new Map();   // id -> Voice
 const muted = new Set();  // 保存しない。次に開いて無音だと壊れたように見える。
-const soloed = new Set();
+// ソロは同時に1つだけ。どれを鳴らすかは別に覚えず、選んでいる星から引く。
+// 別の場所に「ソロ中の星」を持つと、選択と二重管理になって必ずずれる。
+let soloOn = false;
 let started = false;
 let noticeTimer = null;
 let lastVoiceId = null;
@@ -254,13 +256,14 @@ const app = {
 
   hasVoices: () => state.patch.voices.length > 0,
   isMuted: (id) => muted.has(id),
-  isSoloed: (id) => soloed.has(id),
-  soloActive: () => soloed.size > 0,
+  isSoloed: (id) => soloTargetId() === id,
+  soloActive: () => soloTargetId() != null,
 
-  // ソロが1つでも立っていれば、それ以外は黙る
+  // ソロ中に鳴るのは1つだけ。鳴るのは選んでいる星。
   audible(id) {
     if (muted.has(id)) return false;
-    return soloed.size === 0 || soloed.has(id);
+    const solo = soloTargetId();
+    return solo == null || solo === id;
   },
 
   toggleMute(id) {
@@ -269,14 +272,14 @@ const app = {
     applyAudible();
   },
 
+  // ソロの入口はいつも選んでいる星のパネルなので、id は選択と一致する。
   toggleSolo(id) {
-    if (soloed.has(id)) soloed.delete(id);
-    else soloed.add(id);
+    soloOn = !(soloOn && soloTargetId() === id);
     applyAudible();
   },
 
   clearSolo() {
-    soloed.clear();
+    soloOn = false;
     applyAudible();
   },
 
@@ -284,7 +287,9 @@ const app = {
   select(id) {
     state.selectedId = id;
     if (id) lastVoiceId = id;
-    redraw();
+    // ソロは選んだ星に付いて回る。applyAudible が描き直しまでやる。
+    if (soloOn) applyAudible();
+    else redraw();
   },
 
   // タブから音色パネルに戻るとき、直前に見ていた点を開く
@@ -300,7 +305,8 @@ const app = {
     if (started) spawn(data);
     state.selectedId = lastVoiceId = data.id;
     this.syncDelay();
-    redraw();
+    if (soloOn) applyAudible(); // 置いたばかりの星がソロの対象になる
+    else redraw();
     save();
   },
 
@@ -324,7 +330,8 @@ const app = {
     state.patch.voices.push(data);
     if (started) spawn(data);
     state.selectedId = lastVoiceId = data.id;
-    redraw();
+    if (soloOn) applyAudible();
+    else redraw();
     save();
   },
 
@@ -338,11 +345,13 @@ const app = {
       voice.stop(); // release をかけてから切る
     }
     muted.delete(id);
-    soloed.delete(id);
+    if (state.selectedId === id) state.selectedId = null;
+    if (lastVoiceId === id) lastVoiceId = null;
+    // 消したのがソロ中の星で、引き継ぐ先も無いならソロ自体を降ろす。
+    // 残したままだと、どれも鳴らないのにソロの札だけ出ていることになる。
+    if (soloOn && !findVoice(state.selectedId || lastVoiceId)) soloOn = false;
     this.syncDelay();
     applyAudible();
-    if (state.selectedId === id) state.selectedId = null;
-    redraw();
     save();
   },
 
@@ -563,6 +572,14 @@ function redraw() {
   strip.render();
 }
 
+// ソロ中に鳴らす星。選んでいる星、選択を外していれば最後に見ていた星。
+// 指しているものが消えていたらソロは掛かっていない扱いにする。
+function soloTargetId() {
+  if (!soloOn) return null;
+  const id = state.selectedId || lastVoiceId;
+  return findVoice(id) ? id : null;
+}
+
 function applyAudible() {
   for (const v of state.patch.voices) {
     const voice = live.get(v.id);
@@ -576,7 +593,7 @@ function swapVoices() {
   for (const voice of live.values()) voice.stop();
   live.clear();
   muted.clear();
-  soloed.clear();
+  soloOn = false;
   lastVoiceId = null;
   if (started) {
     app.applyMaster(true);
