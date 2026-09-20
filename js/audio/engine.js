@@ -1,5 +1,5 @@
 import { createIR } from './ir.js';
-import { TUNING_DEFAULTS } from './music.js';
+import { TUNING_DEFAULTS, keySteps } from './music.js';
 
 // AudioParam への直接代入はクリック音になる。変更は必ず engine.ramp() を通す。
 const LOOKAHEAD_MS = 25;
@@ -48,7 +48,8 @@ export class Engine {
     this.voices = [];
     this.ready = false;
     this._timer = null;
-    this.tuning = Object.assign({}, TUNING_DEFAULTS);
+    this.tuning = Object.assign({}, TUNING_DEFAULTS, { offset: 0 });
+    this._keyAt = 0;
   }
 
   init() {
@@ -57,10 +58,11 @@ export class Engine {
     const ctx = new Ctx();
     this.ctx = ctx;
 
-    // 星8つ分が素通しで集まるとリミッタが常時 7dB 潰す羽目になる。
+    // 星が素通しで集まるとリミッタが常時 7dB 潰す羽目になる。
     // 先にヘッドルームを確保しておけば、リミッタは頭だけ押さえればよくなる。
+    // 上限を 8 点から 12 点へ上げたぶん、ここも 1dB ぶん下げてある。
     this.masterBus = ctx.createGain();
-    this.masterBus.gain.value = 0.5;
+    this.masterBus.gain.value = 0.45;
 
     // 聞こえない低域を先に捨ててからリミッタへ入れる
     this.rumble = ctx.createBiquadFilter();
@@ -152,8 +154,29 @@ export class Engine {
     this.fbFilters[1].lp.connect(this.fbRL);
     this.fbRL.connect(this.delayL);
 
+    // テープの揺れ。ディレイ時間そのものを超低速で動かす。周期の噛み合わない
+    // 2本を足すので、往復が読めない。深さは時間に対する比で持つ（短い設定で
+    // 絶対量のまま掛けると、そこだけ音程が跳ねる）。
+    this.wowGain = ctx.createGain();
+    this.wowGain.gain.value = 0;
+    this.wowLfos = [0.13, 0.29].map((hz, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = hz;
+      const g = ctx.createGain();
+      g.gain.value = i === 0 ? 0.62 : 0.38;
+      o.connect(g);
+      g.connect(this.wowGain);
+      o.start();
+      return o;
+    });
+    this.wowGain.connect(this.delayL.delayTime);
+    this.wowGain.connect(this.delayR.delayTime);
+
     this.delayReturn.connect(this.masterBus);
 
+    this._delaySec = 0.42;
+    this._wow = 0;
     this.ready = true;
     this._startScheduler();
     return ctx;
@@ -204,9 +227,31 @@ export class Engine {
 
   setDelayTime(ms) {
     const t = Math.min(2.0, ms / 1000);
+    this._delaySec = t;
     this.ramp(this.delayL.delayTime, t, 0.08);
     // 右は 1.5 倍。同じ長さにすると左右の打点が重なって幅が死ぬ。
     this.ramp(this.delayR.delayTime, Math.min(2.4, t * 1.5), 0.08);
+    this._applyWow();
+  }
+
+  // 帰還のローパス。暗いテープエコーと明るいデジタルの差はここだけで出る。
+  // ハイパスは動かさない。低域は溜まると濁るだけで、明暗には効かない。
+  setDelayTone(v) {
+    if (!this.fbFilters) return;
+    const t = Math.min(1, Math.max(0, v));
+    const hz = 600 * Math.pow(14000 / 600, t);
+    for (const f of this.fbFilters) this.ramp(f.lp.frequency, hz, 0.08);
+  }
+
+  setDelayWow(v) {
+    this._wow = Math.min(1, Math.max(0, v || 0));
+    this._applyWow();
+  }
+
+  // 深さは時間の 0.6% まで。テープの実機もこの程度で、これ以上はビブラートに聞こえる。
+  _applyWow() {
+    if (!this.wowGain) return;
+    this.ramp(this.wowGain.gain, this._delaySec * 0.006 * this._wow, 0.2);
   }
 
   // 襷掛けなので、一周の利得は片側の2乗になる。√を掛けて元の効き方に戻す。
@@ -216,19 +261,51 @@ export class Engine {
     this.ramp(this.fbRL.gain, f, 0.05);
   }
 
+  // ルートか音階が変わったときだけ転調ぶんを捨てる。マスターの別のノブを
+  // 触るたびに 0 へ戻すと、音量を動かしただけで調が飛ぶ。
   setTuning(tuning) {
-    this.tuning = Object.assign({}, TUNING_DEFAULTS, tuning || {});
+    const prev = this.tuning;
+    const next = Object.assign({}, TUNING_DEFAULTS, tuning || {});
+    const sameKey = prev && prev.root === next.root && prev.scale === next.scale;
+    next.offset = sameKey ? (prev.offset || 0) : 0;
+    if (!sameKey) this._keyAt = 0;
+    this.tuning = next;
     for (const v of this.voices) {
       if (v.retune) v.retune();
     }
   }
 
-  applyMaster(master) {
-    this.setMasterGain(master.gain);
-    this.setDelayTime(master.delay.time);
-    this.setDelayFeedback(master.delay.feedback);
-    this.setTuning(master.tuning);
-    this.setReverbIR(master.reverb.length, master.reverb.decay);
+  // ---- 転調 ----------------------------------------------------------
+  // 数分に一度、音階の音度ぶんだけルートをずらす。アンビエントで一番効くのは
+  // 「気づかないうちにコードが変わっていた」ことで、固定のキーだと構造的に起きない。
+  // 移るときは 4 秒の時定数で滑らせる。切り替えると「別の曲が始まった」に聞こえる。
+  _stepKey(now) {
+    const d = this.tuning.drift || 0;
+    if (d <= 0) {
+      if (this.tuning.offset) {
+        this.tuning.offset = 0;
+        this._retuneKey();
+      }
+      this._keyAt = 0;
+      return;
+    }
+    const period = 90 + (1 - d) * 510;
+    if (!this._keyAt) {
+      this._keyAt = now + period;
+      return;
+    }
+    if (now < this._keyAt) return;
+    this._keyAt = now + period;
+    const steps = keySteps(this.tuning).filter((s) => s !== (this.tuning.offset || 0));
+    if (!steps.length) return;
+    this.tuning.offset = steps[Math.floor(Math.random() * steps.length)];
+    this._retuneKey();
+  }
+
+  _retuneKey() {
+    for (const v of this.voices) {
+      if (v.retune) v.retune(4);
+    }
   }
 
   // ---- voices -------------------------------------------------------
@@ -254,6 +331,7 @@ export class Engine {
       if (!this.ctx || this.ctx.state !== 'running') return;
       const now = this.ctx.currentTime;
       const until = now + HORIZON;
+      this._stepKey(now);
       for (const v of this.voices) {
         if (v.schedule) v.schedule(until);
         if (v.evolve) v.evolve(now);

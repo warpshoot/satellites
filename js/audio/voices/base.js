@@ -12,6 +12,10 @@ export const MOTION_PARAMS = [
 ];
 
 export const MIX_PARAMS = [
+  // 縦位置の傾きに足すオフセット。位置は距離も決めてしまうので、
+  // これが無いと「遠いのに明るい」が作れない。距離ではなく音色の話なので、
+  // 「近さのノブ」とは別物。
+  { key: 'tone', label: '明るさ', min: -1, max: 1, scale: 'lin', def: 0 },
   { key: 'reverbSend', label: 'リバーブ', min: 0, max: 1, scale: 'pow' },
   { key: 'delaySend', label: 'ディレイ', min: 0, max: 1, scale: 'pow' }
 ];
@@ -22,6 +26,7 @@ export const COMMON_DEFAULTS = {
   attack: 2.0,
   release: 4.0,
   drift: 0.3,
+  tone: 0,
   reverbSend: 0.4,
   delaySend: 0.15
 };
@@ -31,12 +36,30 @@ export const TONE_MAX = 16000;
 
 const TAU = Math.PI * 2;
 
+// 一番遅い成分。37〜97 秒の重ねだけだと、3〜4 分で「もう一周分の景色は見た」に
+// なる。放置して聴くものなので、10 分近い周期を1本混ぜて景色を動かし続ける。
+const SLOW_RATIO = 4.83;
+
 // 縦位置は音色の傾き。ローパス1本で塞ぐと、上に置いた星も下に置いた星も
 // 「暗いか、もっと暗いか」でしかなくなる。低域と高域を逆向きに動かす。
 export const TILT_DB = 9;
 
+// ピッチのばらつき用。一様乱数だと 2400cent が 2 オクターブへ平らに散って、
+// 旋律ではなく散弾になる。中心に寄せると、離れた音はたまに出る「跳び」になる。
+export function triangular() {
+  return Math.random() + Math.random() - 1;
+}
+
 export function tiltFromY(y) {
   return Math.min(1, Math.max(0, y)) * 2 - 1;
+}
+
+// 縦位置の傾きに明るさのオフセットを足した合計。盤面の端に置いた星にも
+// まだ振れる余地を残すので、[-1, 1] ではなく少しはみ出せるようにしてある。
+export const TILT_SPAN = 1.5;
+
+export function tiltTotal(tilt, tone) {
+  return Math.min(TILT_SPAN, Math.max(-TILT_SPAN, tilt + (tone || 0)));
 }
 
 // 面から浮いた分。距離にはすでに入っているが、方向としては何も言っていない。
@@ -175,6 +198,58 @@ export class Voice {
   weight() { return 1; }
   applyDrift() {}
   retune() {}
+  applyClock() {}
+
+  // ---- 軌道の時計 ----------------------------------------------------
+  // 軌道が触るのは距離・パン・傾き・にじみだけで、全部なめらかな量だった。
+  // 発音の時刻は interval 任せなので、見えている動きと聞こえるイベントが
+  // 噛み合わない。位相そのものを時計として渡して、刻み目で鳴らせるようにする。
+  //
+  // clock = { theta, t, omega }。位置の更新（10Hz）で入れ直し、
+  // 先読みの 100ms ぶんだけここで外挿する。
+  setOrbitClock(clock) {
+    const prev = this._clock ? this._clock.omega : 0;
+    this._clock = clock && clock.omega ? clock : null;
+    const now = this._clock ? this._clock.omega : 0;
+    if ((prev !== 0) !== (now !== 0)) this._lastTick = 0;
+    // 位置の更新は 10Hz で来る。角速度が変わっていなければ間隔も変わらないので、
+    // そのたびにランプを積まない。
+    if (prev !== now) this.applyClock();
+  }
+
+  // 軌道に同期しているときの、実際に鳴る間隔。していなければ null。
+  tickInterval(hits) {
+    const c = this._clock;
+    if (!c || !c.omega) return null;
+    return (TAU / Math.abs(c.omega)) / Math.max(1, Math.round(hits || 1));
+  }
+
+  // [from, until) の間に位相が刻み目を通過する時刻。刻みの原点は近点
+  // （θ = 90°）に置く。つぶれた軌道なら、一番近づいた瞬間に鳴る。
+  orbitTicks(from, until, hits) {
+    const out = [];
+    const c = this._clock;
+    if (!c || !c.omega) return out;
+    const gap = TAU / Math.max(1, Math.round(hits || 1));
+    const org = Math.PI / 2;
+    const idxAt = (t) => (c.theta + c.omega * (t - c.t) - org) / gap;
+    const dir = c.omega > 0 ? 1 : -1;
+    let k = dir > 0 ? Math.ceil(idxAt(from)) : Math.floor(idxAt(from));
+    let guard = 0;
+    while (guard++ < 64) {
+      const t = c.t + (k * gap + org - c.theta) / c.omega;
+      if (t >= until) break;
+      if (t >= from) out.push(t);
+      k += dir;
+    }
+    return out;
+  }
+
+  // 刻み目に乗せたまま、前後へわずかにずらす。きっちり揃うと機械になる。
+  tickJitter(gapSec) {
+    const j = (this.params.jitter || 0) / 100;
+    return (Math.random() * 2 - 1) * j * gapSec * 0.25;
+  }
 
   get tuning() {
     return this.engine.tuning;
@@ -287,8 +362,9 @@ export class Voice {
   // 縦位置の傾きと、面の前後を同じシェルフで受ける。
   // 低域は前後で動かさない。奥に行くほど落ちるのは高域だけ。
   applyShelves() {
-    this.engine.ramp(this.loShelf.gain, -this._tilt * TILT_DB, 0.05);
-    this.engine.ramp(this.hiShelf.gain, this._tilt * TILT_DB + this._backDb, 0.05);
+    const tilt = tiltTotal(this._tilt, this.common.tone);
+    this.engine.ramp(this.loShelf.gain, -tilt * TILT_DB, 0.05);
+    this.engine.ramp(this.hiShelf.gain, tilt * TILT_DB + this._backDb, 0.05);
   }
 
   // 面からの浮き。距離とは別に、にじみ方と前後を決める。
@@ -313,13 +389,18 @@ export class Voice {
     const periods = [37.3, 53.7, 71.1, 97.3];
     this._dr = periods.map((p) => {
       const w = (TAU / p) * (0.8 + Math.random() * 0.4);
-      return { w1: w, w2: w * 1.618, p1: Math.random() * TAU, p2: Math.random() * TAU };
+      return {
+        w1: w, w2: w * 1.618, w3: w / SLOW_RATIO,
+        p1: Math.random() * TAU, p2: Math.random() * TAU, p3: Math.random() * TAU
+      };
     });
   }
 
   driftAt(i, t) {
     const a = this._dr[i % this._dr.length];
-    return Math.sin(t * a.w1 + a.p1) * 0.62 + Math.sin(t * a.w2 + a.p2) * 0.38;
+    return Math.sin(t * a.w1 + a.p1) * 0.45
+      + Math.sin(t * a.w2 + a.p2) * 0.28
+      + Math.sin(t * a.w3 + a.p3) * 0.27;
   }
 
   // scheduler から呼ばれる。4Hz で足りる速さの変化しか扱わない。
@@ -348,6 +429,7 @@ export class Voice {
   setCommon(key, value) {
     this.common[key] = value;
     if (key === 'reverbSend' || key === 'delaySend') this.applySend();
+    if (key === 'tone') this.applyShelves();
   }
 
   setParam(key, value) {

@@ -13,7 +13,7 @@ export class DroneVoice extends Voice {
   static color = '#6f9dff';
   static defaults = { freq: 80, count: 3, detune: 12, wave: 'sawtooth', width: 0.6 };
   static params = [
-    { key: 'freq', label: 'ピッチ', min: 20, max: 2000, scale: 'log', unit: 'Hz' },
+    { key: 'freq', label: 'ピッチ', min: 20, max: 2000, scale: 'log', unit: 'Hz', note: true },
     { key: 'count', label: 'ユニゾン', min: 1, max: 5, scale: 'int' },
     // 100cent = 半音。振り切ると崩れる手前まで行ける。下は 1cent 刻みで効く。
     { key: 'detune', label: 'デチューン', min: 0, max: 100, scale: 'pow', unit: 'cent' },
@@ -66,8 +66,9 @@ export class DroneVoice extends Voice {
     this.oscs.forEach((o, i) => this.engine.ramp(o.frequency, this._freqAt(i, mul), tc));
   }
 
-  retune() {
-    this._retuneAll(0.4);
+  // 転調は長い時定数で渡される。切り替えると「別の曲が始まった」に聞こえる。
+  retune(tc) {
+    this._retuneAll(tc || 0.4);
   }
 
   // デチューン量そのものを超低速で動かす。うなりの速さが呼吸する。

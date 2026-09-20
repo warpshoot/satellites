@@ -2,6 +2,7 @@ import { ENV_PARAMS, MOTION_PARAMS, MIX_PARAMS, COMMON_DEFAULTS } from '../audio
 import { ORBIT_PARAMS, LOOK_PARAM } from '../state.js';
 import { VOICE_TYPES } from '../audio/voices/registry.js';
 import { lookOf, LOOK_IDS } from './looks.js';
+import { quantize, noteName } from '../audio/music.js';
 
 const TYPE_PARAM = {
   key: 'type',
@@ -91,6 +92,9 @@ export function buildControl(p, value, onInput, onCommit, opts) {
   head.appendChild(val);
   row.appendChild(head);
 
+  // 値の右に添える短い文字。いまのところ音名だけが使う。
+  const show = (v) => fmt(p, v) + (o.suffix ? ' ' + o.suffix(v) : '');
+
   if (p.type === 'select') {
     val.textContent = '';
     const group = document.createElement('div');
@@ -134,11 +138,11 @@ export function buildControl(p, value, onInput, onCommit, opts) {
   input.step = 1;
   input.disabled = !!o.disabled;
   input.value = Math.round(Math.min(1, Math.max(0, toNorm(p, value))) * 1000);
-  val.textContent = fmt(p, value);
+  val.textContent = show(value);
   input.setAttribute('aria-valuetext', val.textContent);
   input.addEventListener('input', () => {
     const v = fromNorm(p, input.value / 1000);
-    val.textContent = fmt(p, v);
+    val.textContent = show(v);
     input.setAttribute('aria-valuetext', val.textContent);
     onInput(v);
   });
@@ -159,7 +163,7 @@ export function buildControl(p, value, onInput, onCommit, opts) {
         // pointerdown の直後に届く input（押した位置の値）を上書きする
         setTimeout(() => {
           input.value = Math.round(Math.min(1, Math.max(0, toNorm(p, def))) * 1000);
-          val.textContent = fmt(p, def);
+          val.textContent = show(def);
           input.setAttribute('aria-valuetext', val.textContent);
           onInput(def);
           if (onCommit) onCommit(def);
@@ -261,10 +265,20 @@ export function createPanel(el, app) {
     el.appendChild(src);
 
     const own = section(V.label);
+    // 条件付きのパラメータは、周回の行と同じ扱い。消さずに disabled にする。
+    // 消すと押すたびにパネルの高さが跳ねて、何が隠れたかも分からない。
+    const gated = V.params.some((p) => p.when);
     V.params.forEach((p) => {
+      const opts = { def: V.defaults[p.key], disabled: p.when ? !p.when(v) : false };
+      // 音程のノブには、実際に鳴る音名を添える。吸着があるので、
+      // ノブの Hz と鳴っている音は一致しない。
+      if (p.note) opts.suffix = (val) => noteName(quantize(val, app.master().tuning));
       own.appendChild(
-        buildControl(p, v.params[p.key], (val) => app.setParam(v.id, p.key, val), () => app.commit(),
-          { def: V.defaults[p.key] })
+        buildControl(p, v.params[p.key], (val) => app.setParam(v.id, p.key, val), () => {
+          app.commit();
+          // 他の行の有効・無効を切り替えるノブは、押したら並びを引き直す
+          if (gated && p.type === 'select') app.refreshPanel();
+        }, opts)
       );
     });
     el.appendChild(own);

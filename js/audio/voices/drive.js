@@ -48,7 +48,7 @@ export class DriveVoice extends Voice {
   static color = '#e0776f';
   static defaults = { freq: 55, drive: 0.5, filterPos: 'post', swellRate: 0.08, swellDepth: 30 };
   static params = [
-    { key: 'freq', label: 'ピッチ', min: 20, max: 300, scale: 'log', unit: 'Hz' },
+    { key: 'freq', label: 'ピッチ', min: 20, max: 300, scale: 'log', unit: 'Hz', note: true },
     { key: 'drive', label: 'ドライブ', min: 0, max: 1, scale: 'pow' },
     { key: 'filterPos', label: 'フィルタ位置', type: 'select', options: ['pre', 'post'] },
     { key: 'swellRate', label: 'ビブラート速度', min: 0.02, max: 1, scale: 'log', unit: 'Hz' },
@@ -126,8 +126,8 @@ export class DriveVoice extends Voice {
     if (this.inner) this.engine.ramp(this.inner.frequency, hz);
   }
 
-  retune() {
-    if (this.osc) this.engine.ramp(this.osc.frequency, quantize(this.params.freq, this.tuning), 0.4);
+  retune(tc) {
+    if (this.osc) this.engine.ramp(this.osc.frequency, quantize(this.params.freq, this.tuning), tc || 0.4);
   }
 
   // 歪みの深さを超低速で動かす。カーブの作り直しは重いので、突っ込む量で振る。

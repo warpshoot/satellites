@@ -1,4 +1,4 @@
-import { Voice } from './base.js';
+import { Voice, triangular } from './base.js';
 import { quantize } from '../music.js';
 
 // 減衰する金属音。他の4種は「持続する塊」か「その破片」で、
@@ -21,12 +21,21 @@ export class BellVoice extends Voice {
   static color = '#c3a6ff';
   static defaults = {
     interval: 4, jitter: 50, center: 440, spread: 1200,
-    ratio: '2.76', index: 3, decay: 4, width: 0.6
+    ratio: '2.76', index: 3, decay: 4, width: 0.6,
+    trigger: 'free', hits: 2
   };
   static params = [
-    { key: 'interval', label: '間隔', min: 0.2, max: 30, scale: 'log', unit: 's' },
+    { key: 'interval', label: '間隔', min: 0.2, max: 30, scale: 'log', unit: 's',
+      when: (v) => !(v.orbit && v.params.trigger === 'orbit') },
+    // 鳴る時刻を軌道の位相から取る。刻み目の原点は近点なので、つぶれた軌道なら
+    // 一番近づいた瞬間に鳴る。周回していない星では「間隔」へ落ちる。
+    { key: 'trigger', label: 'タイミング', type: 'select', options: ['free', 'orbit'],
+      labels: { free: '間隔', orbit: '軌道' }, when: (v) => !!v.orbit },
+    { key: 'hits', label: '1周の回数', min: 1, max: 8, scale: 'int', def: 2,
+      when: (v) => !!v.orbit && v.params.trigger === 'orbit' },
+
     { key: 'jitter', label: 'ばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
-    { key: 'center', label: 'ピッチ', min: 80, max: 2000, scale: 'log', unit: 'Hz' },
+    { key: 'center', label: 'ピッチ', min: 80, max: 2000, scale: 'log', unit: 'Hz', note: true },
     { key: 'spread', label: 'ピッチ幅', min: 0, max: 2400, scale: 'pow', unit: 'cent' },
     { key: 'ratio', label: 'モジュレータ比', type: 'select', options: RATIOS, labels: RATIO_LABELS },
     { key: 'index', label: 'モジュレーション', min: 0, max: 10, scale: 'pow' },
@@ -53,13 +62,22 @@ export class BellVoice extends Voice {
   // 減衰 12s を 0.2s 間隔で撒くと 60 発が重なる。GRAIN と同じ考えで、
   // 重なった数の平方根で割って密度が音量にならないようにする。
   _density() {
-    const interval = Math.max(0.1, this.params.interval * (this._driftMul || 1));
+    const interval = Math.max(0.1, this._effInterval());
     const overlap = Math.max(1, this.params.decay / interval);
     return 0.7 / Math.sqrt(overlap);
   }
 
   _applyDensity() {
     if (this.mix) this.engine.ramp(this.mix.gain, this._density(), 0.2);
+  }
+
+  _effInterval() {
+    const locked = this.params.trigger === 'orbit' && this.tickInterval(this.params.hits);
+    return locked || this.params.interval * (this._driftMul || 1);
+  }
+
+  applyClock() {
+    this._applyDensity();
   }
 
   // 撒く間隔を超低速で動かす。鳴る頻度が呼吸する。
@@ -70,6 +88,7 @@ export class BellVoice extends Voice {
 
   resetSchedule() {
     this.nextTime = this.ctx.currentTime + 0.1;
+    this._lastTick = 0;
   }
 
   _step() {
@@ -81,6 +100,7 @@ export class BellVoice extends Voice {
   schedule(until) {
     if (!this.mix || this.disposed) return;
     const now = this.ctx.currentTime;
+    if (this.params.trigger === 'orbit' && this._clock) return this._scheduleOrbit(now, until);
     if (this.nextTime < now) this.nextTime = now + 0.01;
     let guard = 0;
     while (this.nextTime < until && guard++ < 32) {
@@ -89,9 +109,18 @@ export class BellVoice extends Voice {
     }
   }
 
+  _scheduleOrbit(now, until) {
+    const gap = this.tickInterval(this.params.hits) || 1;
+    for (const t of this.orbitTicks(Math.max(now, this._lastTick || 0), until, this.params.hits)) {
+      if (t <= (this._lastTick || 0)) continue;
+      this._lastTick = t;
+      this._spawn(Math.max(now + 0.005, t + this.tickJitter(gap)));
+    }
+  }
+
   _spawn(t) {
     const ctx = this.ctx;
-    const cents = (Math.random() * 2 - 1) * this.params.spread / 2;
+    const cents = triangular() * this.params.spread / 2;
     const freq = quantize(this.params.center * Math.pow(2, cents / 1200), this.tuning);
     const ratio = parseFloat(this.params.ratio) || 1;
     const decay = this.params.decay;

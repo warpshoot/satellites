@@ -1,11 +1,12 @@
 import { engine } from './audio/engine.js';
 import { createVoice, voiceClass } from './audio/voices/registry.js';
 import { state, loadPatch, save, newVoiceData, findVoice, MAX_VOICES,
-  setPatch, backupCurrent, hasBackup, takeBackup } from './state.js';
+  setPatch, backupCurrent, hasBackup, takeBackup, MASTER_PARAMS, setPath } from './state.js';
 import { patchLink, patchText, parseIncoming, copyText,
   savePatchFile, readPatchFile } from './patchio.js';
 import { PRESETS } from './presets.js';
 import { COMMON_PARAMS } from './audio/voices/base.js';
+import { ROOTS, SCALE_IDS } from './audio/music.js';
 import { createField } from './ui/field.js';
 import { createPanel, randomFor } from './ui/panel.js';
 import { createStrip } from './ui/strip.js';
@@ -97,7 +98,16 @@ export function orbitState(v, t) {
   const g = orbitGeom(v);
   const theta = g.phase + ((TAU * t) / period) * dir;
   const p = ellipsePoint(g.rho, v.orbitEcc || 0, ang, v.orbitIncl || 0, theta);
-  return { x: p.x, y: p.y, z: p.z, rho: g.rho };
+  return { x: p.x, y: p.y, z: p.z, rho: g.rho, theta };
+}
+
+// 位相そのものを音の時計として渡す。ボイス側はこれを 100ms ぶん外挿して、
+// 刻み目を踏む時刻を先に予約する。周回していなければ null。
+export function orbitClock(v, t) {
+  if (!v.orbit) return null;
+  const period = Math.max(1, v.orbitPeriod || 60);
+  const dir = v.orbitDir === 'retrograde' ? -1 : 1;
+  return { theta: orbitState(v, t).theta, t, omega: (dir * TAU) / period };
 }
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -154,7 +164,43 @@ function delayMs(master) {
   return master.delay.sync ? orbitDelayMs(master) : master.delay.time;
 }
 
+// 全体のサイコロで引く音階。「なし」と「半音」は吸着しないのと同じで、
+// 引いた瞬間に調の話が消える。出口として置いてあるものを出口から外す。
+const DICE_SCALES = SCALE_IDS.filter((id) => id !== 'off' && id !== 'chromatic');
+
+// 全体のサイコロが触るマスターのノブ。音量・見た目・軌道同期は含めない。
+const DICE_MASTER = [
+  'tuning.drift', 'reverb.length', 'reverb.decay',
+  'delay.time', 'delay.feedback', 'delay.tone', 'delay.wow'
+];
+
+// 1つの星の音だけを振る。アタックとリリースは振らない
+// （20 秒のアタックを引くと「押したのに何も起きない」になる）。
+function rollVoice(v) {
+  const V = voiceClass(v.type);
+  const voice = live.get(v.id);
+  for (const p of V.params) {
+    v.params[p.key] = randomFor(p);
+    if (voice) voice.setParam(p.key, v.params[p.key]);
+  }
+  for (const p of COMMON_PARAMS) {
+    if (p.key !== 'drift' && p.key !== 'tone' && p.key !== 'reverbSend' && p.key !== 'delaySend') continue;
+    v.common[p.key] = randomFor(p);
+    if (voice) voice.setParam(p.key, v.common[p.key]);
+  }
+}
+
+// いま鳴っているルート。転調で動くので、名前だけは画面に出しておく。
+function soundingKey() {
+  const t = engine.tuning || state.patch.master.tuning;
+  const off = t.offset || 0;
+  const i = ROOTS.indexOf(t.root);
+  const name = ROOTS[(((i < 0 ? 0 : i) + off) % 12 + 12) % 12];
+  return off ? name + '（' + (off > 0 ? '+' : '') + off + '）' : name;
+}
+
 const app = {
+  soundingKey,
   voices: () => state.patch.voices,
   master: () => state.patch.master,
   find: (id) => findVoice(id),
@@ -279,7 +325,7 @@ const app = {
   },
 
   add(type, x, y) {
-    if (!this.canAdd()) return this.notice('星は8つまで');
+    if (!this.canAdd()) return this.notice('星は' + MAX_VOICES + '個まで');
     const data = newVoiceData(type, clamp01(x), clamp01(y));
     // 置いた場所から半径と位相を割り出す。位相は時刻を引いておかないと、
     // 置いた瞬間に軌道上の別の場所へ飛ぶ。
@@ -300,7 +346,7 @@ const app = {
   duplicate(id) {
     const src = findVoice(id);
     if (!src) return;
-    if (!this.canAdd()) return this.notice('星は8つまで');
+    if (!this.canAdd()) return this.notice('星は' + MAX_VOICES + '個まで');
     const data = newVoiceData(src.type, clamp01(src.x + 0.07), clamp01(src.y - 0.07));
     data.orbit = src.orbit;
     data.vol = src.vol;
@@ -430,21 +476,30 @@ const app = {
   randomize(id) {
     const v = findVoice(id);
     if (!v) return;
-    const V = voiceClass(v.type);
-    const voice = live.get(id);
-    for (const p of V.params) {
-      v.params[p.key] = randomFor(p);
-      if (voice) voice.setParam(p.key, v.params[p.key]);
-    }
-    // 共通のうち、鳴り方を決めるものだけ。アタックとリリースは振らない。
-    // 20 秒のアタックを引くと「押したのに何も起きない」になる。
-    for (const p of COMMON_PARAMS) {
-      if (p.key !== 'drift' && p.key !== 'reverbSend' && p.key !== 'delaySend') continue;
-      v.common[p.key] = randomFor(p);
-      if (voice) voice.setParam(p.key, v.common[p.key]);
-    }
+    rollVoice(v);
     redraw();
     save();
+  },
+
+  // 音作りの当てがまったく無いときの出口。星ごとのサイコロと同じで、
+  // 置いた場所と周回には触らない。マスターは音楽に効くところだけ振る。
+  // 見た目（背景・追尾・パルス）と音量は、聴き方の設定なので動かさない。
+  randomizeAll() {
+    backupCurrent(); // 1回だけ戻れるようにしてから振る
+    const m = state.patch.master;
+    m.tuning.root = ROOTS[Math.floor(Math.random() * ROOTS.length)];
+    m.tuning.scale = DICE_SCALES[Math.floor(Math.random() * DICE_SCALES.length)];
+    for (const p of MASTER_PARAMS) {
+      if (!DICE_MASTER.includes(p.path)) continue;
+      setPath(m, p.path, randomFor(p));
+    }
+    // 飽和だけは一様に振らない。上半分はどの配置でも同じ顔になる。
+    m.burn = Math.pow(Math.random(), 2) * 0.7;
+    for (const v of state.patch.voices) rollVoice(v);
+    this.applyMaster(true);
+    redraw();
+    save();
+    this.notice('全部振った');
   },
 
   // ---- 持ち出しと持ち込み -------------------------------------------
@@ -530,6 +585,8 @@ const app = {
     engine.setBurn(m.burn);
     engine.setDelayTime(delayMs(m));
     engine.setDelayFeedback(m.delay.feedback);
+    engine.setDelayTone(m.delay.tone);
+    engine.setDelayWow(m.delay.wow);
     engine.setTuning(m.tuning);
     if (withIR) engine.setReverbIR(m.reverb.length, m.reverb.decay);
   },
@@ -593,21 +650,25 @@ function swapVoices() {
 function applyPos(v) {
   const voice = live.get(v.id);
   if (!voice) return;
-  const p = app.resolved(v);
+  const t = engine.now();
+  const p = resolve(v, t);
   voice.setVolume(v.vol != null ? v.vol : 0.85);
   voice.setDistance(nearFromDistance(coreDistance(p)));
   voice.setPosition(p.x, p.y);
   voice.setElevation(p.zOff); // 面からの浮き。距離には入っているが、方向としては別口
+  voice.setOrbitClock(orbitClock(v, t));
 }
 
 function spawn(data) {
   const voice = createVoice(engine, data);
   engine.addVoice(voice);
   live.set(data.id, voice);
-  const p = app.resolved(data);
+  const t = engine.now();
+  const p = resolve(data, t);
   voice.setDistance(nearFromDistance(coreDistance(p)));
   voice.setPosition(p.x, p.y);
   voice.setElevation(p.zOff);
+  voice.setOrbitClock(orbitClock(data, t));
   voice.setMuted(!app.audible(data.id));
   voice.start();
   return voice;

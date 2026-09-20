@@ -1,4 +1,5 @@
 import { VOICE_TYPES } from '../audio/voices/registry.js';
+import { MAX_VOICES } from '../state.js';
 import { lookOf, skySvg, LOOK_IDS } from './looks.js';
 
 export const DOT_MIN = 2;
@@ -258,7 +259,7 @@ export function createField(el, app) {
     const y = Math.min(1, Math.max(0, u.y));
     app.select(null);
     if (!app.canAdd()) {
-      app.notice('星は8つまで');
+      app.notice('星は' + MAX_VOICES + '個まで');
       return;
     }
     showPicker(x, y);

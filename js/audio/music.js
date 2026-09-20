@@ -38,12 +38,46 @@ export const SCALE_LABELS = {
   unison: '単音'
 };
 
-export const TUNING_DEFAULTS = { root: 'C', scale: 'pentaMinor' };
+// drift は転調の速さ。0 で動かない。実際に何半音ずらすかは engine が持つ
+// （パッチに焼くと、開くたびに違う調で始まって「保存した音」でなくなる）。
+export const TUNING_DEFAULTS = { root: 'C', scale: 'pentaMinor', drift: 0 };
 
 // C4 を基準にとる。吸着はオクターブをまたいで効くので、どの高さで数えても同じ。
 export function rootHz(name) {
   const i = ROOTS.indexOf(name);
   return 440 * Math.pow(2, ((i < 0 ? 0 : i) - 9) / 12);
+}
+
+// いま鳴っているルートの周波数。転調ぶんはここでだけ効かせる。
+export function baseHz(tuning) {
+  return rootHz(tuning.root) * Math.pow(2, (tuning.offset || 0) / 12);
+}
+
+// 転調の行き先。音階の音度そのものを候補にする。ここを半音の自由歩行に
+// すると、数分ごとに関係のない調へ飛んで「別の曲が始まった」に聞こえる。
+// 上下 7 半音に収めて、積み上がって遠くへ行ってしまわないようにする。
+export function keySteps(tuning) {
+  const set = scaleSet(tuning);
+  if (!set) return [0];
+  const out = [];
+  for (const s of set) {
+    for (const v of [s, s - 12]) {
+      if (Math.abs(v) <= 7 && !out.includes(v)) out.push(v);
+    }
+  }
+  return out.length ? out : [0];
+}
+
+// 周波数を音名にする。A4 = 440Hz。ぴったりでなければセントを添える。
+// 画面のどこにも「いま何の音か」が出ていないのは、キーを持つアプリとしては片手落ち。
+export function noteName(hz) {
+  if (!hz || !isFinite(hz) || hz <= 0) return '';
+  const semis = 12 * Math.log2(hz / 440) + 69;
+  const n = Math.round(semis);
+  const cents = Math.round((semis - n) * 100);
+  const name = ROOTS[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
+  if (cents === 0) return name;
+  return name + (cents > 0 ? '+' : '') + cents;
 }
 
 export function scaleSet(tuning) {
@@ -56,7 +90,7 @@ export function quantize(hz, tuning) {
   if (!hz || !isFinite(hz) || hz <= 0) return hz;
   const set = scaleSet(tuning);
   if (!set) return hz;
-  const base = rootHz(tuning.root);
+  const base = baseHz(tuning);
   const semis = 12 * Math.log2(hz / base);
   const oct = Math.floor(semis / 12);
   const within = semis - oct * 12;

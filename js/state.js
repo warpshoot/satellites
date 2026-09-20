@@ -3,6 +3,11 @@ import { LOOK_IDS, LOOK_LABELS, SKY_STYLES, SKY_LABELS } from './ui/looks.js';
 import { COMMON_DEFAULTS } from './audio/voices/base.js';
 import { ROOTS, SCALE_IDS, SCALE_LABELS, TUNING_DEFAULTS } from './audio/music.js';
 
+// 同時に置ける星の数。DRONE を 3 本重ねると残り 5 で、それだと
+// 土台と質感と粒を同居させた時点で埋まる。実測のヘッドルームに余裕があるので
+// 12 まで開けた（masterBus 側で 1dB ぶん下げてある）。
+export const MAX_VOICES = 12;
+
 const KEY = 'satellites.patch.v1';
 const OLD_KEY = 'drift.patch.v1'; // DRIFT 時代の保存を引き継ぐ
 const VERSION = 3;
@@ -23,7 +28,7 @@ export const MASTER_DEFAULTS = {
   // 基音と音階は全ボイスで共有する。星がどこに置かれても音程は噛み合う。
   tuning: Object.assign({}, TUNING_DEFAULTS),
   reverb: { length: 3.0, decay: 2.5 },
-  delay: { time: 420, feedback: 0.35, sync: true },
+  delay: { time: 420, feedback: 0.35, sync: true, tone: 0.5, wow: 0 },
   burn: 0,       // マスターの飽和。0 は曲線が恒等なので厳密に素通し。
   pulse: true,  // 音に合わせて星を動かすか
   sky: 'noise', // 背景の星の種類
@@ -46,14 +51,18 @@ export const MASTER_GROUPS = [
     title: 'キー',
     params: [
       { path: 'tuning.root', label: 'ルート', type: 'select', options: ROOTS },
-      { path: 'tuning.scale', label: 'スケール', type: 'select', options: SCALE_IDS, labels: SCALE_LABELS }
+      { path: 'tuning.scale', label: 'スケール', type: 'select', options: SCALE_IDS, labels: SCALE_LABELS },
+      // 0 で動かない。上げるほど転調が速くなる。
+      { path: 'tuning.drift', label: '転調', min: 0, max: 1, scale: 'pow', def: TUNING_DEFAULTS.drift }
     ]
   },
   {
     title: 'リバーブ',
     params: [
-      { path: 'reverb.length', label: '長さ', min: 0.5, max: 15, scale: 'log', unit: 's', deferred: true, def: MASTER_DEFAULTS.reverb.length },
-      { path: 'reverb.decay', label: '減衰', min: 1, max: 6, scale: 'lin', deferred: true, def: MASTER_DEFAULTS.reverb.decay }
+      // 「長さ」と「減衰」は意味が食い合っていた。長さ 15 秒にしても減衰 6 だと
+      // 何も伸びない。前者は部屋の寸法、後者は尾の吸われ方なので、そう呼ぶ。
+      { path: 'reverb.length', label: 'サイズ', min: 0.5, max: 15, scale: 'log', unit: 's', deferred: true, def: MASTER_DEFAULTS.reverb.length },
+      { path: 'reverb.decay', label: '吸収', min: 1, max: 6, scale: 'lin', deferred: true, def: MASTER_DEFAULTS.reverb.decay }
     ]
   },
   {
@@ -61,6 +70,8 @@ export const MASTER_GROUPS = [
     params: [
       { path: 'delay.time', label: 'タイム', min: 50, max: 2000, scale: 'log', unit: 'ms', def: MASTER_DEFAULTS.delay.time },
       { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'pow', def: MASTER_DEFAULTS.delay.feedback },
+      { path: 'delay.tone', label: 'トーン', min: 0, max: 1, scale: 'lin', def: MASTER_DEFAULTS.delay.tone },
+      { path: 'delay.wow', label: 'ゆれ', min: 0, max: 1, scale: 'pow', def: MASTER_DEFAULTS.delay.wow },
       Object.assign({ path: 'delay.sync', label: '軌道に同期' }, ONOFF)
     ]
   },
@@ -130,7 +141,8 @@ function sanitize(raw) {
     gain: num(raw.master && raw.master.gain, MASTER_DEFAULTS.gain),
     tuning: {
       root: ROOTS.includes(rt.root) ? rt.root : TUNING_DEFAULTS.root,
-      scale: SCALE_IDS.includes(rt.scale) ? rt.scale : TUNING_DEFAULTS.scale
+      scale: SCALE_IDS.includes(rt.scale) ? rt.scale : TUNING_DEFAULTS.scale,
+      drift: clamp01(num(rt.drift, TUNING_DEFAULTS.drift))
     },
     reverb: {
       length: num(raw.master && raw.master.reverb && raw.master.reverb.length, MASTER_DEFAULTS.reverb.length),
@@ -139,6 +151,8 @@ function sanitize(raw) {
     delay: {
       time: num(raw.master && raw.master.delay && raw.master.delay.time, MASTER_DEFAULTS.delay.time),
       feedback: Math.min(0.85, num(raw.master && raw.master.delay && raw.master.delay.feedback, MASTER_DEFAULTS.delay.feedback)),
+      tone: clamp01(num(raw.master && raw.master.delay && raw.master.delay.tone, MASTER_DEFAULTS.delay.tone)),
+      wow: clamp01(num(raw.master && raw.master.delay && raw.master.delay.wow, MASTER_DEFAULTS.delay.wow)),
       // 旧版のパッチはディレイ時間を自分で決めているので、勝手に周回へ合わせない
       sync: raw.master && raw.master.delay && raw.master.delay.sync != null
         ? !!raw.master.delay.sync
@@ -150,7 +164,7 @@ function sanitize(raw) {
     sky: raw.master && SKY_STYLES.includes(raw.master.sky) ? raw.master.sky : 'noise',
     follow: !!(raw.master && raw.master.follow)
   };
-  const voices = Array.isArray(raw.voices) ? raw.voices.slice(0, 8) : [];
+  const voices = Array.isArray(raw.voices) ? raw.voices.slice(0, MAX_VOICES) : [];
   for (const v of voices) {
     const V = voiceClass(v.type);
     if (!v.type || V.type !== v.type) continue;
@@ -176,8 +190,6 @@ function sanitize(raw) {
   }
   return patch;
 }
-
-export const MAX_VOICES = 8;
 
 function num(v, fallback) {
   return typeof v === 'number' && isFinite(v) ? v : fallback;

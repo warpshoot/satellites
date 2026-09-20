@@ -165,5 +165,61 @@ export const PRESETS = [
         })
       ]
     }
+  },
+  {
+    // 軌道に同期させた発音だけで組む。周期 23 / 31 / 53 秒は噛み合わないので、
+    // 3 本の打点が揃うのは 6 時間に一度しかない。間隔のノブでは作れない模様。
+    name: '時計',
+    patch: {
+      version: 3,
+      master: {
+        gain: 0.8,
+        // 転調を入れてある。5 分ほどで調が動くので、同じ模様のまま景色が変わる。
+        tuning: { root: 'A', scale: 'dorian', drift: 0.5 },
+        reverb: { length: 9, decay: 2.0 },
+        // トーンを絞って、ゆれを入れるとテープのエコーになる
+        delay: { time: 700, feedback: 0.45, sync: true, tone: 0.28, wow: 0.45 },
+        burn: 0.12,
+        pulse: true, sky: 'noise', follow: false
+      },
+      voices: [
+        // 1周に3回。つぶれた軌道なので、刻み目のうち2つは近点で鳴る
+        v('pluck', 0.5, 0.5, {
+          vol: 0.85, orbit: true, orbitPeriod: 23, orbitRadius: 0.24,
+          orbitEcc: 0.5, orbitAngle: 0, orbitIncl: 25,
+          common: { attack: 4, release: 6, drift: 0.3, tone: 0.15, reverbSend: 0.55, delaySend: 0.35 },
+          params: { interval: 3, jitter: 25, center: 294, spread: 1200, decay: 4,
+            damp: 0.4, pick: 0.18, width: 0.7, trigger: 'orbit', hits: 3 }
+        }),
+        // 1周に5回。こちらは逆行させて、追い越しが左右で分かるようにする
+        v('pluck', 0.5, 0.5, {
+          vol: 0.6, orbit: true, orbitPeriod: 31, orbitRadius: 0.4,
+          orbitEcc: 0.25, orbitAngle: 110, orbitIncl: 55, orbitDir: 'retrograde',
+          common: { attack: 6, release: 6, drift: 0.45, tone: -0.2, reverbSend: 0.75, delaySend: 0.2 },
+          params: { interval: 3, jitter: 40, center: 147, spread: 700, decay: 6,
+            damp: 0.7, pick: 0.42, width: 0.9, trigger: 'orbit', hits: 5 }
+        }),
+        // 1周に2回。遅い軌道の近点でだけ鳴るので、たまにしか来ない
+        v('bell', 0.5, 0.5, {
+          vol: 0.5, orbit: true, orbitPeriod: 53, orbitRadius: 0.62,
+          orbitEcc: 0.65, orbitAngle: 230, orbitIncl: 70,
+          common: { attack: 8, release: 8, drift: 0.5, tone: 0.3, reverbSend: 1, delaySend: 0.45 },
+          params: { interval: 6, jitter: 30, center: 1170, spread: 1400, ratio: '2.76',
+            index: 2.2, decay: 9, width: 0.8, trigger: 'orbit', hits: 2 }
+        }),
+        // 土台。ここが動くと打点の噛み合いが聞こえなくなるので、止めて暗く敷く
+        v('drone', 0.5, 0.66, {
+          vol: 0.72,
+          common: { attack: 18, release: 10, drift: 0.35, tone: -0.35, reverbSend: 0.3, delaySend: 0 },
+          params: { freq: 73, count: 3, detune: 9, wave: 'triangle', width: 0.6 }
+        }),
+        v('noise', 0.5, 0.5, {
+          vol: 0.32, orbit: true, orbitPeriod: 310, orbitRadius: 0.5,
+          orbitEcc: 0.4, orbitAngle: 60, orbitIncl: 45,
+          common: { attack: 20, release: 8, drift: 0.8, tone: 0.25, reverbSend: 0.95, delaySend: 0.1 },
+          params: { center: 4200, q: 1.4, swellDepth: 0.55, swellRate: 0.05, width: 1 }
+        })
+      ]
+    }
   }
 ];

@@ -17,6 +17,7 @@ export function renderMaster(el, app, ui) {
   // 機能ごとに切る。音の設定と見た目の設定を同じ列に並べない。
   MASTER_GROUPS.forEach((g) => {
     const sec = ui.section(g.title);
+    if (g.title === 'キー') sec.appendChild(keyReadout(app));
     g.params.forEach((p) => {
       const value = getPath(app.master(), p.path);
       sec.appendChild(
@@ -40,8 +41,42 @@ export function renderMaster(el, app, ui) {
     });
     el.appendChild(sec);
   });
+  el.appendChild(diceSection(app, ui));
   el.appendChild(presetSection(app, ui));
   el.appendChild(patchSection(app, ui));
+}
+
+// 転調があると、選んだルートと鳴っているルートがずれる。ずれたまま
+// どこにも出ないと、キーの欄が嘘をついていることになる。
+function keyReadout(app) {
+  const row = document.createElement('div');
+  row.className = 'readout';
+  const paint = () => { row.textContent = 'いま ' + app.soundingKey(); };
+  paint();
+  const t = setInterval(() => {
+    if (!row.isConnected) return clearInterval(t);
+    paint();
+  }, 1000);
+  return row;
+}
+
+// 音作りの当てがまったく無いときの出口。押す前に退避を取るので、
+// 気に入らなければ「元に戻す」で帰ってこられる。
+function diceSection(app, ui) {
+  const sec = ui.section('サイコロ');
+  const row = document.createElement('div');
+  row.className = 'patch-row';
+  const b = document.createElement('button');
+  b.className = 'chip';
+  b.textContent = '全部振る';
+  b.addEventListener('click', () => app.randomizeAll());
+  row.appendChild(b);
+  const hint = document.createElement('span');
+  hint.className = 'readout';
+  hint.textContent = '置いた場所と周回は動かない';
+  row.appendChild(hint);
+  sec.appendChild(row);
+  return sec;
 }
 
 // プリセット。上書きの前に必ず退避を取るので、
