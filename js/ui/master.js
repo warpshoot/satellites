@@ -37,7 +37,25 @@ export function renderMaster(el, app, ui) {
     );
   });
   el.appendChild(sec);
+  el.appendChild(presetSection(app, ui));
   el.appendChild(patchSection(app, ui));
+}
+
+// はじめから入っている配置。上書きの前に必ず退避を取るので、
+// 押し間違えても「前の配置に戻す」で帰ってこられる。
+function presetSection(app, ui) {
+  const sec = ui.section('はじめから入っている配置');
+  const row = document.createElement('div');
+  row.className = 'patch-row';
+  app.presets().forEach((name, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = name;
+    b.addEventListener('click', () => app.loadPreset(i));
+    row.appendChild(b);
+  });
+  sec.appendChild(row);
+  return sec;
 }
 
 // パッチの持ち出しと持ち込み。ファイルが主、リンクとクリップボードが従。

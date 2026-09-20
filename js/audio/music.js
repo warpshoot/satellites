@@ -10,9 +10,14 @@ export const SCALES = {
   major: [0, 2, 4, 5, 7, 9, 11],
   minor: [0, 2, 3, 5, 7, 8, 10],
   dorian: [0, 2, 3, 5, 7, 9, 10],
+  lydian: [0, 2, 4, 6, 7, 9, 11],      // 増4度。浮いたまま着地しない
+  harmMinor: [0, 2, 3, 5, 7, 8, 11],   // 短調に導音。長2度の跳びが不穏に鳴る
   pentaMinor: [0, 3, 5, 7, 10],
+  inSen: [0, 1, 5, 7, 8],              // 陰旋法。半音が2つ入るだけで景色が変わる
   wholeTone: [0, 2, 4, 6, 8, 10],
-  fifths: [0, 7]
+  fourths: [0, 5],
+  fifths: [0, 7],
+  unison: [0]                          // 全部ユニゾン。ドローンを厚くするとき効く
 };
 
 export const SCALE_IDS = Object.keys(SCALES);
@@ -23,9 +28,14 @@ export const SCALE_LABELS = {
   major: '長',
   minor: '短',
   dorian: 'ドリア',
+  lydian: 'リディア',
+  harmMinor: '和声短',
   pentaMinor: 'ペンタ',
+  inSen: '陰旋',
   wholeTone: '全音',
-  fifths: '5度'
+  fourths: '4度',
+  fifths: '5度',
+  unison: '単音'
 };
 
 export const TUNING_DEFAULTS = { root: 'C', scale: 'pentaMinor' };

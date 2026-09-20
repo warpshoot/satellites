@@ -6,17 +6,44 @@ import { getNoiseBuffer } from '../noiseBuffer.js';
 
 // 粒の窓。直線の三角だと角が立って、短い粒ほどクリックに聞こえる。
 // 立ち上がりと終わりだけ余弦で丸め、真ん中は平らに保つ。
+//
+// 窓を左右非対称にできるようにすると、同じ GRAIN が 3 つの別物になる。
+// 立ち上がりが長く切れが速ければ息を吸う音、一瞬で立ち上がって減衰すれば
+// マレットや鐘、対称ならいままで通りのパッド。音源を1つ足すより安い。
 const WINDOW_N = 128;
-const WINDOW_EDGE = 0.35;
 
-function makeWindow(scale) {
+// 形。0 = 吸う（立ち上がり 0.95 / 切れ 0.05）、1 = 弾く（0.02 / 0.95）。
+// 足して 1 を超えると両端が食い合うので、超えない幅にしてある。
+function edgesOf(shape) {
+  const s = Math.min(1, Math.max(0, shape));
+  return { a: 0.95 - 0.93 * s, r: 0.05 + 0.90 * s };
+}
+
+function windowAt(x, a, r) {
+  if (x < a) return 0.5 - 0.5 * Math.cos((Math.PI * x) / a);
+  if (x > 1 - r) return 0.5 - 0.5 * Math.cos((Math.PI * (1 - x)) / r);
+  return 1;
+}
+
+// 形を変えると窓の抱えるエネルギーが変わる。弾く形は平らな部分が無いぶん痩せる。
+// 二乗平均で揃えておかないと、形のノブが音量のノブになってしまう。
+function windowRms(a, r) {
+  let sum = 0;
+  for (let i = 0; i < WINDOW_N; i++) {
+    const v = windowAt(i / (WINDOW_N - 1), a, r);
+    sum += v * v;
+  }
+  return Math.sqrt(sum / WINDOW_N);
+}
+
+const REF_RMS = windowRms(0.35, 0.35); // もとの対称な窓を基準にする
+
+function makeWindow(shape, scale) {
+  const e = edgesOf(shape);
+  const g = (REF_RMS / (windowRms(e.a, e.r) || 1)) * scale;
   const w = new Float32Array(WINDOW_N);
   for (let i = 0; i < WINDOW_N; i++) {
-    const x = i / (WINDOW_N - 1);
-    let a = 1;
-    if (x < WINDOW_EDGE) a = 0.5 - 0.5 * Math.cos((Math.PI * x) / WINDOW_EDGE);
-    else if (x > 1 - WINDOW_EDGE) a = 0.5 - 0.5 * Math.cos((Math.PI * (1 - x)) / WINDOW_EDGE);
-    w[i] = a * scale;
+    w[i] = windowAt(i / (WINDOW_N - 1), e.a, e.r) * g;
   }
   w[0] = 0;
   w[WINDOW_N - 1] = 0;
@@ -24,8 +51,22 @@ function makeWindow(scale) {
 }
 
 // noise 粒は Q=6 のバンドパスで痩せる。オシレータの粒と並べると音量が揃わない。
-const WINDOW = makeWindow(1);
-const WINDOW_NOISE = makeWindow(2.6);
+const NOISE_MAKEUP = 2.6;
+
+// 粒ごとに窓を組み直すのは無駄なので、形を 24 段に丸めて使い回す。
+const SHAPE_STEPS = 24;
+const windowCache = new Map();
+
+function windowFor(shape, noise) {
+  const q = Math.round(Math.min(1, Math.max(0, shape)) * SHAPE_STEPS);
+  const key = q + (noise ? 'n' : 'o');
+  let w = windowCache.get(key);
+  if (!w) {
+    w = makeWindow(q / SHAPE_STEPS, noise ? NOISE_MAKEUP : 1);
+    windowCache.set(key, w);
+  }
+  return w;
+}
 
 export class GrainVoice extends Voice {
   static type = 'grain';
@@ -33,7 +74,7 @@ export class GrainVoice extends Voice {
   static look = 'ring';
   static color = '#f0c674';
   static defaults = {
-    interval: 1.2, jitter: 40, grainLen: 300,
+    interval: 1.2, jitter: 40, grainLen: 300, shape: 0.5,
     center: 700, spread: 600, wave: 'sine', width: 0.7
   };
   static params = [
@@ -41,6 +82,7 @@ export class GrainVoice extends Voice {
     { key: 'interval', label: '間隔', min: 0.05, max: 30, scale: 'log', unit: 's' },
     { key: 'jitter', label: '間隔のばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
     { key: 'grainLen', label: '粒の長さ', min: 20, max: 2000, scale: 'log', unit: 'ms' },
+    { key: 'shape', label: '粒の形（0 = 吸う / 1 = 弾く）', min: 0, max: 1, scale: 'lin' },
     { key: 'center', label: '音程中心', min: 100, max: 4000, scale: 'log', unit: 'Hz' },
     { key: 'spread', label: '音程幅', min: 0, max: 2400, scale: 'pow', unit: 'cent' },
     { key: 'width', label: '定位のばらつき', min: 0, max: 1, scale: 'lin' },
@@ -110,7 +152,7 @@ export class GrainVoice extends Voice {
     const len = this.params.grainLen / 1000;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.setValueCurveAtTime(this.params.wave === 'noise' ? WINDOW_NOISE : WINDOW, t, len);
+    g.gain.setValueCurveAtTime(windowFor(this.params.shape, this.params.wave === 'noise'), t, len);
     // 粒ごとに定位を振る。全部同じ場所に落ちると線にしか聞こえない。
     const pan = ctx.createStereoPanner();
     pan.pan.value = (Math.random() * 2 - 1) * this.params.width;

@@ -43,6 +43,13 @@ export function fromNorm(p, n) {
   return v;
 }
 
+// サイコロ用。刻み方に沿って振る。log のノブを lin で振ると毎回上限付近に寄って、
+// 何度振っても同じ音しか出てこない。
+export function randomFor(p) {
+  if (p.type === 'select') return p.options[Math.floor(Math.random() * p.options.length)];
+  return fromNorm(p, Math.random());
+}
+
 export function fmt(p, v) {
   const abs = Math.abs(v);
   const s = p.scale === 'int' || abs >= 100 ? v.toFixed(0) : abs >= 10 ? v.toFixed(1) : v.toFixed(2);
@@ -162,6 +169,13 @@ export function createPanel(el, app) {
     mute.textContent = 'ミュート';
     mute.addEventListener('click', () => app.toggleMute(v.id));
     head.appendChild(mute);
+
+    // 音作りの当てが無くても手が動くように。刻み方に沿って振る。
+    const dice = document.createElement('button');
+    dice.className = 'chip';
+    dice.textContent = 'サイコロ';
+    dice.addEventListener('click', () => app.randomize(v.id));
+    head.appendChild(dice);
 
     const dup = document.createElement('button');
     dup.className = 'chip';

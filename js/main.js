@@ -4,9 +4,11 @@ import { state, loadPatch, save, newVoiceData, findVoice, MAX_VOICES,
   setPatch, backupCurrent, hasBackup, takeBackup } from './state.js';
 import { patchLink, patchText, parseIncoming, copyText,
   savePatchFile, readPatchFile } from './patchio.js';
+import { PRESETS } from './presets.js';
+import { COMMON_PARAMS } from './audio/voices/base.js';
 import { createField } from './ui/field.js';
 import { createPerform } from './ui/perform.js';
-import { createPanel } from './ui/panel.js';
+import { createPanel, randomFor } from './ui/panel.js';
 import { createStrip } from './ui/strip.js';
 
 const fieldEl = document.getElementById('field');
@@ -436,6 +438,41 @@ const app = {
     }
     applyPos(v);
     this.syncDelay();
+    redraw();
+    save();
+  },
+
+  // ---- はじめから入っている配置 --------------------------------------
+  presets: () => PRESETS.map((x) => x.name),
+
+  loadPreset(i) {
+    const preset = PRESETS[i];
+    if (!preset) return;
+    backupCurrent(); // 読む前に退避。押し間違えても帰ってこられる。
+    setPatch(JSON.parse(JSON.stringify(preset.patch)));
+    save();
+    swapVoices();
+    this.notice(preset.name + ' を読み込んだ');
+  },
+
+  // 音作りの当てが無いときの出口。置いた場所と周回は触らない。
+  // 動かすのはその星の音そのものだけ。
+  randomize(id) {
+    const v = findVoice(id);
+    if (!v) return;
+    const V = voiceClass(v.type);
+    const voice = live.get(id);
+    for (const p of V.params) {
+      v.params[p.key] = randomFor(p);
+      if (voice) voice.setParam(p.key, v.params[p.key]);
+    }
+    // 共通のうち、鳴り方を決めるものだけ。アタックとリリースは振らない。
+    // 20 秒のアタックを引くと「押したのに何も起きない」になる。
+    for (const p of COMMON_PARAMS) {
+      if (p.key !== 'drift' && p.key !== 'reverbSend' && p.key !== 'delaySend') continue;
+      v.common[p.key] = randomFor(p);
+      if (voice) voice.setParam(p.key, v.common[p.key]);
+    }
     redraw();
     save();
   },
