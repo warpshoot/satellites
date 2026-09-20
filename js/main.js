@@ -124,6 +124,29 @@ export function nearFromDistance(d) {
 }
 
 
+// ディレイ時間を周回と噛み合わせる。一番速い星の1周を、聞こえる長さに入るまで
+// 半分に割っていく。周回と同じ拍で反射が返るので、動きと反射が喧嘩しない。
+// 周回している星が無ければノブの値のまま。
+const DELAY_SYNC_MAX = 1.2; // 秒。これより長いと反射が拍として聞こえない
+
+function orbitDelayMs(master) {
+  let fastest = Infinity;
+  for (const v of state.patch.voices) {
+    if (!v.orbit) continue;
+    const p = Math.max(1, v.orbitPeriod || 60);
+    if (p < fastest) fastest = p;
+  }
+  if (!isFinite(fastest)) return master.delay.time;
+  let t = fastest;
+  let guard = 0;
+  while (t > DELAY_SYNC_MAX && guard++ < 24) t /= 2;
+  return Math.min(2000, Math.max(50, t * 1000));
+}
+
+function delayMs(master) {
+  return master.delay.sync ? orbitDelayMs(master) : master.delay.time;
+}
+
 const app = {
   voices: () => state.patch.voices,
   master: () => state.patch.master,
@@ -251,6 +274,7 @@ const app = {
     state.patch.voices.push(data);
     if (started) spawn(data);
     state.selectedId = lastVoiceId = data.id;
+    this.syncDelay();
     redraw();
     save();
   },
@@ -290,6 +314,7 @@ const app = {
     }
     muted.delete(id);
     soloed.delete(id);
+    this.syncDelay();
     applyAudible();
     if (state.selectedId === id) state.selectedId = null;
     redraw();
@@ -333,7 +358,14 @@ const app = {
     if (!v) return;
     v[key] = value;
     applyPos(v);
+    if (key === 'orbitPeriod') this.syncDelay();
     field.layout();
+  },
+
+  // 周回の顔ぶれが変わったらディレイを引き直す（合わせる設定のときだけ動く）
+  syncDelay() {
+    if (!engine.ready || !state.patch.master.delay.sync) return;
+    engine.setDelayTime(orbitDelayMs(state.patch.master));
   },
 
   toggleOrbit(id) {
@@ -354,6 +386,7 @@ const app = {
       v.orbit = false;
     }
     applyPos(v);
+    this.syncDelay();
     redraw();
     save();
   },
@@ -365,8 +398,9 @@ const app = {
     if (!engine.ready) return;
     const m = state.patch.master;
     if (!paused) engine.setMasterGain(m.gain); // 停止中に音量を触っても鳴り出さない
-    engine.setDelayTime(m.delay.time);
+    engine.setDelayTime(delayMs(m));
     engine.setDelayFeedback(m.delay.feedback);
+    engine.setTuning(m.tuning);
     if (withIR) engine.setReverbIR(m.reverb.length, m.reverb.decay);
   },
 
@@ -524,7 +558,16 @@ async function begin() {
   });
   await engine.resume();
   app.applyMaster(true);
-  for (const data of state.patch.voices) spawn(data); // 復帰した点は一斉にフェードイン
+  // 一斉に立ち上げると全部が同じ瞬間に揃って開く。散らして、勝手に集まってきた
+  // ように聞かせる。アタックが長い点ほど遅れても気づかれない。
+  state.patch.voices.forEach((data, i) => {
+    const wait = i === 0 ? 0 : 900 * i + Math.random() * 4000;
+    setTimeout(() => {
+      if (!started || paused) return;
+      if (live.has(data.id) || !findVoice(data.id)) return;
+      spawn(data);
+    }, wait);
+  });
   hideGate();
   setTransport();
   redraw();

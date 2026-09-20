@@ -1,10 +1,11 @@
 import { voiceClass } from './audio/voices/registry.js';
 import { LOOK_IDS, LOOK_LABELS, SKY_STYLES, SKY_LABELS } from './ui/looks.js';
 import { COMMON_DEFAULTS } from './audio/voices/base.js';
+import { ROOTS, SCALE_IDS, SCALE_LABELS, TUNING_DEFAULTS } from './audio/music.js';
 
 const KEY = 'satellites.patch.v1';
 const OLD_KEY = 'drift.patch.v1'; // DRIFT 時代の保存を引き継ぐ
-const VERSION = 2;
+const VERSION = 3;
 
 // 周回するときだけ意味を持つ
 export const ORBIT_PARAMS = [
@@ -18,8 +19,10 @@ export const ORBIT_PARAMS = [
 
 export const MASTER_DEFAULTS = {
   gain: 0.8,
+  // 基音と音階は全ボイスで共有する。星がどこに置かれても音程は噛み合う。
+  tuning: Object.assign({}, TUNING_DEFAULTS),
   reverb: { length: 3.0, decay: 2.5 },
-  delay: { time: 420, feedback: 0.35 },
+  delay: { time: 420, feedback: 0.35, sync: true },
   pulse: true,  // 音に合わせて星を動かすか
   sky: 'noise', // 背景の星の種類
   follow: false // 選んだ星を画面の中心に置くか
@@ -27,10 +30,13 @@ export const MASTER_DEFAULTS = {
 
 export const MASTER_PARAMS = [
   { path: 'gain', label: 'マスター音量', min: 0, max: 1, scale: 'lin' },
+  { path: 'tuning.root', label: '基音', type: 'select', options: ROOTS },
+  { path: 'tuning.scale', label: '音階', type: 'select', options: SCALE_IDS, labels: SCALE_LABELS },
   { path: 'reverb.length', label: 'リバーブ長さ', min: 0.5, max: 8, scale: 'lin', unit: 's', deferred: true },
   { path: 'reverb.decay', label: 'リバーブ減衰', min: 1, max: 6, scale: 'lin', deferred: true },
   { path: 'delay.time', label: 'ディレイ時間', min: 50, max: 2000, scale: 'log', unit: 'ms' },
   { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'lin' },
+  { path: 'delay.sync', label: 'ディレイを周回に合わせる', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } },
   { path: 'pulse', label: '音に合わせて星を動かす', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } },
   { path: 'sky', label: '背景の星', type: 'select', options: SKY_STYLES, labels: SKY_LABELS, visual: true },
   { path: 'follow', label: '選んだ星を中心に置く', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' }, visual: true }
@@ -82,16 +88,25 @@ function emptyPatch() {
 
 function sanitize(raw) {
   const patch = emptyPatch();
-  if (!raw || (raw.version !== 1 && raw.version !== 2)) return patch;
+  if (!raw || !(raw.version >= 1 && raw.version <= VERSION)) return patch;
+  const rt = (raw.master && raw.master.tuning) || {};
   patch.master = {
     gain: num(raw.master && raw.master.gain, MASTER_DEFAULTS.gain),
+    tuning: {
+      root: ROOTS.includes(rt.root) ? rt.root : TUNING_DEFAULTS.root,
+      scale: SCALE_IDS.includes(rt.scale) ? rt.scale : TUNING_DEFAULTS.scale
+    },
     reverb: {
       length: num(raw.master && raw.master.reverb && raw.master.reverb.length, MASTER_DEFAULTS.reverb.length),
       decay: num(raw.master && raw.master.reverb && raw.master.reverb.decay, MASTER_DEFAULTS.reverb.decay)
     },
     delay: {
       time: num(raw.master && raw.master.delay && raw.master.delay.time, MASTER_DEFAULTS.delay.time),
-      feedback: Math.min(0.85, num(raw.master && raw.master.delay && raw.master.delay.feedback, MASTER_DEFAULTS.delay.feedback))
+      feedback: Math.min(0.85, num(raw.master && raw.master.delay && raw.master.delay.feedback, MASTER_DEFAULTS.delay.feedback)),
+      // 旧版のパッチはディレイ時間を自分で決めているので、勝手に周回へ合わせない
+      sync: raw.master && raw.master.delay && raw.master.delay.sync != null
+        ? !!raw.master.delay.sync
+        : raw.version >= 3 && MASTER_DEFAULTS.delay.sync
     },
     pulse: raw.master && raw.master.pulse != null ? !!raw.master.pulse : true,
     sky: raw.master && SKY_STYLES.includes(raw.master.sky) ? raw.master.sky : 'noise',

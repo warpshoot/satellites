@@ -1,6 +1,11 @@
 import { Voice } from './base.js';
+import { quantize } from '../music.js';
 
 // 微妙にデチューンした複数オシレータを重ねた持続音。土台担当。
+// 散らし方は等間隔にしない。左右対称に並べると、うなりの周期まで揃って
+// 「重ねた」ではなく「ずらした1本」に聞こえる。
+const SPREAD = [0, 1, -0.79, 1.62, -1.41];
+
 export class DroneVoice extends Voice {
   static type = 'drone';
   static label = 'DRONE';
@@ -29,7 +34,7 @@ export class DroneVoice extends Voice {
     for (let i = 0; i < n; i++) {
       const osc = ctx.createOscillator();
       osc.type = this.params.wave;
-      osc.frequency.value = this._freqAt(i, n);
+      osc.frequency.value = this._freqAt(i);
       // デチューンした本数を左右に散らす。点のままだと土台に幅が出ない。
       const pan = ctx.createStereoPanner();
       pan.pan.value = this._spread(i, n) * this.params.width;
@@ -43,12 +48,31 @@ export class DroneVoice extends Voice {
 
   _spread(i, n) {
     if (n < 2) return 0;
-    return (i - (n - 1) / 2) / ((n - 1) / 2);
+    const max = Math.max.apply(null, SPREAD.slice(0, n).map(Math.abs));
+    return SPREAD[i] / (max || 1);
   }
 
-  _freqAt(i, n) {
-    const cents = (i - (n - 1) / 2) * this.params.detune;
-    return this.params.freq * Math.pow(2, cents / 1200);
+  // 基音だけ音階に吸着させる。デチューンは吸着させない（潰れて意味が消える）
+  _freqAt(i, mul) {
+    const base = quantize(this.params.freq, this.tuning);
+    const cents = SPREAD[i % SPREAD.length] * this.params.detune * (mul == null ? 1 : mul);
+    return base * Math.pow(2, cents / 1200);
+  }
+
+  _retuneAll(tc) {
+    if (!this.oscs) return;
+    const mul = this._driftMul || 1;
+    this.oscs.forEach((o, i) => this.engine.ramp(o.frequency, this._freqAt(i, mul), tc));
+  }
+
+  retune() {
+    this._retuneAll(0.4);
+  }
+
+  // デチューン量そのものを超低速で動かす。うなりの速さが呼吸する。
+  applyDrift(d, t) {
+    this._driftMul = 1 + this.driftAt(2, t) * d * 0.4;
+    this._retuneAll(0.4);
   }
 
   teardown() {
@@ -77,7 +101,6 @@ export class DroneVoice extends Voice {
       this.pans.forEach((p, i) => this.engine.ramp(p.pan, this._spread(i, n) * this.params.width, 0.05));
       return;
     }
-    const n = this.oscs.length;
-    this.oscs.forEach((o, i) => this.engine.ramp(o.frequency, this._freqAt(i, n), 0.05));
+    this._retuneAll(0.05);
   }
 }

@@ -1,7 +1,32 @@
 import { Voice } from './base.js';
+import { quantize } from '../music.js';
 import { getNoiseBuffer } from '../noiseBuffer.js';
 
 // 短い音がランダムな間隔で落ちる。唯一「音楽っぽさ」を作るパート。
+
+// 粒の窓。直線の三角だと角が立って、短い粒ほどクリックに聞こえる。
+// 立ち上がりと終わりだけ余弦で丸め、真ん中は平らに保つ。
+const WINDOW_N = 128;
+const WINDOW_EDGE = 0.35;
+
+function makeWindow(scale) {
+  const w = new Float32Array(WINDOW_N);
+  for (let i = 0; i < WINDOW_N; i++) {
+    const x = i / (WINDOW_N - 1);
+    let a = 1;
+    if (x < WINDOW_EDGE) a = 0.5 - 0.5 * Math.cos((Math.PI * x) / WINDOW_EDGE);
+    else if (x > 1 - WINDOW_EDGE) a = 0.5 - 0.5 * Math.cos((Math.PI * (1 - x)) / WINDOW_EDGE);
+    w[i] = a * scale;
+  }
+  w[0] = 0;
+  w[WINDOW_N - 1] = 0;
+  return w;
+}
+
+// noise 粒は Q=6 のバンドパスで痩せる。オシレータの粒と並べると音量が揃わない。
+const WINDOW = makeWindow(1);
+const WINDOW_NOISE = makeWindow(2.6);
+
 export class GrainVoice extends Voice {
   static type = 'grain';
   static label = 'GRAIN';
@@ -23,7 +48,8 @@ export class GrainVoice extends Voice {
 
   build() {
     this.mix = this.ctx.createGain();
-    this.mix.gain.value = 0.7;
+    this._driftMul = 1;
+    this.mix.gain.value = this._density();
     this.mix.connect(this.envGain);
     this.resetSchedule();
   }
@@ -31,6 +57,24 @@ export class GrainVoice extends Voice {
   teardown() {
     this.nextTime = Infinity;
     if (this.mix) { try { this.mix.disconnect(); } catch (e) { /* noop */ } this.mix = null; }
+  }
+
+  // 間隔 0.05s で 2000ms の粒を撒くと 40 粒が重なる。粒ごとの音量を
+  // そのままにすると密度がそのまま音量になり、リミッタが全部持っていく。
+  _density() {
+    const interval = Math.max(0.02, this.params.interval * (this._driftMul || 1));
+    const overlap = Math.max(1, (this.params.grainLen / 1000) / interval);
+    return 0.7 / Math.sqrt(overlap);
+  }
+
+  _applyDensity() {
+    if (this.mix) this.engine.ramp(this.mix.gain, this._density(), 0.2);
+  }
+
+  // 撒く間隔そのものを超低速で動かす。密度が呼吸する。
+  applyDrift(d, t) {
+    this._driftMul = 1 + this.driftAt(2, t) * d * 0.35;
+    this._applyDensity();
   }
 
   // 復帰時に過去時刻へ予約しないよう内部時刻を引き直す
@@ -41,7 +85,7 @@ export class GrainVoice extends Voice {
   _step() {
     const j = this.params.jitter / 100;
     const f = 1 + (Math.random() * 2 - 1) * j;
-    return Math.max(0.02, this.params.interval * f);
+    return Math.max(0.02, this.params.interval * (this._driftMul || 1) * f);
   }
 
   // lookahead scheduler から呼ばれる。AudioParam の絶対時刻で先に予約する。
@@ -58,14 +102,14 @@ export class GrainVoice extends Voice {
 
   _spawn(t) {
     const ctx = this.ctx;
-    // 音程は中心 ± 幅/2 から連続値で選ぶ。スケール吸着はしない。
+    // 音程は中心 ± 幅/2 から連続値で選び、そのあと音階へ寄せる。
+    // 吸着なし（scale = なし）ならここは素通りする。
     const cents = (Math.random() * 2 - 1) * this.params.spread / 2;
-    const freq = this.params.center * Math.pow(2, cents / 1200);
+    const freq = quantize(this.params.center * Math.pow(2, cents / 1200), this.tuning);
     const len = this.params.grainLen / 1000;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(1, t + Math.min(len * 0.3, 0.05));
-    g.gain.linearRampToValueAtTime(0, t + len);
+    g.gain.setValueCurveAtTime(this.params.wave === 'noise' ? WINDOW_NOISE : WINDOW, t, len);
     // 粒ごとに定位を振る。全部同じ場所に落ちると線にしか聞こえない。
     const pan = ctx.createStereoPanner();
     pan.pan.value = (Math.random() * 2 - 1) * this.params.width;
@@ -95,5 +139,9 @@ export class GrainVoice extends Voice {
       src.stop(t + len + 0.02);
       src.onended = () => { try { src.disconnect(); g.disconnect(); pan.disconnect(); } catch (e) { /* noop */ } };
     }
+  }
+
+  applyParam(key) {
+    if (key === 'interval' || key === 'grainLen') this._applyDensity();
   }
 }

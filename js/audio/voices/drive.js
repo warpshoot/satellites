@@ -1,4 +1,5 @@
 import { Voice } from './base.js';
+import { quantize } from '../music.js';
 
 function makeCurve(amount) {
   const k = amount * 100;
@@ -35,7 +36,7 @@ export class DriveVoice extends Voice {
     const ctx = this.ctx;
     this.osc = ctx.createOscillator();
     this.osc.type = 'sawtooth';
-    this.osc.frequency.value = this.params.freq;
+    this.osc.frequency.value = quantize(this.params.freq, this.tuning);
 
     this.lfo = ctx.createOscillator();
     this.lfo.type = 'sine';
@@ -94,10 +95,21 @@ export class DriveVoice extends Voice {
     if (this.inner) this.engine.ramp(this.inner.frequency, hz);
   }
 
+  retune() {
+    if (this.osc) this.engine.ramp(this.osc.frequency, quantize(this.params.freq, this.tuning), 0.4);
+  }
+
+  // 歪みの深さを超低速で動かす。カーブの作り直しは重いので、突っ込む量で振る。
+  applyDrift(d, t) {
+    if (!this.preGain) return;
+    const m = 1 + this.driftAt(2, t) * d * 0.18;
+    this.engine.ramp(this.preGain.gain, (0.4 + this.params.drive * 0.6) * m, 0.4);
+  }
+
   applyParam(key) {
     if (!this.osc) return;
     if (key === 'filterPos') return this.rebuild(); // 配線の変更は作り直し
-    if (key === 'freq') this.engine.ramp(this.osc.frequency, this.params.freq, 0.05);
+    if (key === 'freq') this.retune();
     if (key === 'swellRate') this.engine.ramp(this.lfo.frequency, this.params.swellRate, 0.05);
     if (key === 'swellDepth') this.engine.ramp(this.lfoGain.gain, this.params.swellDepth, 0.05);
     if (key === 'drive') {

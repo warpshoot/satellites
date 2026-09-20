@@ -3,6 +3,7 @@
 export const COMMON_PARAMS = [
   { key: 'attack', label: 'アタック', min: 0.01, max: 20, scale: 'log', unit: 's' },
   { key: 'release', label: 'リリース', min: 0.01, max: 30, scale: 'log', unit: 's' },
+  { key: 'drift', label: 'ゆらぎ', min: 0, max: 1, scale: 'lin' },
   { key: 'reverbSend', label: 'リバーブ', min: 0, max: 1, scale: 'lin' },
   { key: 'delaySend', label: 'ディレイ', min: 0, max: 1, scale: 'lin' }
 ];
@@ -10,6 +11,7 @@ export const COMMON_PARAMS = [
 export const COMMON_DEFAULTS = {
   attack: 2.0,
   release: 4.0,
+  drift: 0.3,
   reverbSend: 0.4,
   delaySend: 0.15
 };
@@ -17,8 +19,20 @@ export const COMMON_DEFAULTS = {
 export const TONE_MIN = 100;
 export const TONE_MAX = 16000;
 
-export function cutoffFromY(y) {
-  return TONE_MIN * Math.pow(TONE_MAX / TONE_MIN, Math.min(1, Math.max(0, y)));
+const TAU = Math.PI * 2;
+
+// 縦位置は音色の傾き。ローパス1本で塞ぐと、上に置いた星も下に置いた星も
+// 「暗いか、もっと暗いか」でしかなくなる。低域と高域を逆向きに動かす。
+export const TILT_DB = 9;
+
+export function tiltFromY(y) {
+  return Math.min(1, Math.max(0, y)) * 2 - 1;
+}
+
+// 距離による空気の吸収。核から離れるほど高域が先に落ちる。
+export function airHzFromNear(near) {
+  const n = Math.min(1, Math.max(0, near));
+  return 600 * Math.pow(20000 / 600, n);
 }
 
 // near は核への近さ（0 = 遠い / 1 = 核のすぐそば）。
@@ -31,8 +45,10 @@ export function distanceSend(near) {
   return 0.55 * (1 - Math.min(1, Math.max(0, near)));
 }
 
-export function airFactor(near) {
-  return 0.45 + 0.55 * Math.min(1, Math.max(0, near));
+// 送りはドライほど落とさない。距離の手がかりは絶対量ではなく
+// ウェットとドライの比なので、同じ落ち方をさせると遠い星はただ消える。
+export function wetFromNear(near) {
+  return Math.pow(Math.min(1, Math.max(0, near)), 0.35);
 }
 
 export class Voice {
@@ -46,6 +62,11 @@ export class Voice {
     this.near = 0.5;
     this.vol = data.vol != null ? data.vol : 0.85;
     this.disposed = false;
+    this._airHz = 1000;
+    this._panBase = 0;
+    this._lastEvolve = -1e9;
+    this._driftWasOn = false;
+    this._initDrift();
 
     const ctx = this.ctx;
     this.envGain = ctx.createGain();
@@ -62,6 +83,8 @@ export class Voice {
     this._meterBuf = new Float32Array(this.meter.fftSize);
     this._lvl = 0;
 
+    // 距離の減衰。送りより手前に置くと、遠い星はウェットごと消える。
+    // ここはドライの枝の中だけに効かせる。
     this.levelGain = ctx.createGain();
     this.levelGain.gain.value = this.vol * gainFromNear(this.near);
 
@@ -70,6 +93,16 @@ export class Voice {
     this.toneFilter.frequency.value = 1000;
     this.toneFilter.Q.value = 0.7;
 
+    this.loShelf = ctx.createBiquadFilter();
+    this.loShelf.type = 'lowshelf';
+    this.loShelf.frequency.value = 320;
+    this.loShelf.gain.value = 0;
+
+    this.hiShelf = ctx.createBiquadFilter();
+    this.hiShelf.type = 'highshelf';
+    this.hiShelf.frequency.value = 2600;
+    this.hiShelf.gain.value = 0;
+
     this.panner = ctx.createStereoPanner
       ? ctx.createStereoPanner()
       : null;
@@ -77,19 +110,21 @@ export class Voice {
     this.dryGain = ctx.createGain();
     this.dryGain.gain.value = 1.0; // dry は常に 1.0 固定。send はパラレル送り。
     this.reverbSend = ctx.createGain();
-    this.reverbSend.gain.value = Math.min(1, this.common.reverbSend + distanceSend(this.near));
+    this.reverbSend.gain.value = this._wetGain(this.common.reverbSend, true);
     this.delaySend = ctx.createGain();
-    this.delaySend.gain.value = this.common.delaySend;
+    this.delaySend.gain.value = this._wetGain(this.common.delaySend, false);
 
     this.envGain.connect(this.muteGain);
-    this.muteGain.connect(this.levelGain);
     this.muteGain.connect(this.meter);
-    this.levelGain.connect(this.toneFilter);
-    const tail = this.panner || this.toneFilter;
-    if (this.panner) this.toneFilter.connect(this.panner);
-    tail.connect(this.dryGain);
+    this.muteGain.connect(this.toneFilter);
+    this.toneFilter.connect(this.loShelf);
+    this.loShelf.connect(this.hiShelf);
+    const tail = this.panner || this.hiShelf;
+    if (this.panner) this.hiShelf.connect(this.panner);
+    tail.connect(this.levelGain);
     tail.connect(this.reverbSend);
     tail.connect(this.delaySend);
+    this.levelGain.connect(this.dryGain);
 
     this.dryGain.connect(engine.masterBus);
     this.reverbSend.connect(engine.reverbInput);
@@ -104,6 +139,12 @@ export class Voice {
   build() {}
   teardown() {}
   weight() { return 1; }
+  applyDrift() {}
+  retune() {}
+
+  get tuning() {
+    return this.engine.tuning;
+  }
 
   start() {
     this.build();
@@ -179,32 +220,82 @@ export class Voice {
   setVolume(vol) {
     this.vol = vol;
     this.applyLevel();
+    this.applySend(); // 送りはドライの段を通らないので、ここでも掛け直す
   }
 
   applyLevel() {
     this.engine.ramp(this.levelGain.gain, this.vol * gainFromNear(this.near));
   }
 
+  _wetGain(knob, withDistance) {
+    const amount = withDistance ? Math.min(1, knob + distanceSend(this.near)) : knob;
+    return amount * this.vol * wetFromNear(this.near);
+  }
+
   applySend() {
-    this.engine.ramp(this.reverbSend.gain, Math.min(1, this.common.reverbSend + distanceSend(this.near)));
+    this.engine.ramp(this.reverbSend.gain, this._wetGain(this.common.reverbSend, true));
+    this.engine.ramp(this.delaySend.gain, this._wetGain(this.common.delaySend, false));
   }
 
   setPosition(x, y) {
     if (x == null || y == null) return;
     this._x = x;
     this._y = y;
-    if (this.panner) this.engine.ramp(this.panner.pan, Math.min(1, Math.max(-1, x * 2 - 1)));
-    this.applyTone(cutoffFromY(y) * airFactor(this.near));
+    this._panBase = Math.min(1, Math.max(-1, x * 2 - 1));
+    if (this.panner) this.engine.ramp(this.panner.pan, this._panBase);
+    const tilt = tiltFromY(y);
+    this.engine.ramp(this.loShelf.gain, -tilt * TILT_DB, 0.05);
+    this.engine.ramp(this.hiShelf.gain, tilt * TILT_DB, 0.05);
+    this._airHz = airHzFromNear(this.near);
+    this.applyTone(this._airHz);
   }
 
   applyTone(hz) {
     this.engine.ramp(this.toneFilter.frequency, hz);
   }
 
+  // ---- ゆらぎ --------------------------------------------------------
+  // 周期が噛み合わない正弦を重ねる。乱数を毎回引くとノイズになるし、
+  // 単一の LFO だと周期が読めてしまう。戻ってこない揺れが欲しい。
+  _initDrift() {
+    const periods = [37.3, 53.7, 71.1, 97.3];
+    this._dr = periods.map((p) => {
+      const w = (TAU / p) * (0.8 + Math.random() * 0.4);
+      return { w1: w, w2: w * 1.618, p1: Math.random() * TAU, p2: Math.random() * TAU };
+    });
+  }
+
+  driftAt(i, t) {
+    const a = this._dr[i % this._dr.length];
+    return Math.sin(t * a.w1 + a.p1) * 0.62 + Math.sin(t * a.w2 + a.p2) * 0.38;
+  }
+
+  // scheduler から呼ばれる。4Hz で足りる速さの変化しか扱わない。
+  evolve(t) {
+    if (this.disposed || !this.started) return;
+    if (t - this._lastEvolve < 0.25) return;
+    this._lastEvolve = t;
+    const d = this.common.drift || 0;
+    if (d <= 0) {
+      if (!this._driftWasOn) return;
+      this._driftWasOn = false;
+      this.applyTone(this._airHz);
+      if (this.panner) this.engine.ramp(this.panner.pan, this._panBase, 0.3);
+      this.applyDrift(0, t);
+      return;
+    }
+    this._driftWasOn = true;
+    this.applyTone(this._airHz * Math.pow(2, this.driftAt(0, t) * d * 0.5));
+    if (this.panner) {
+      const pan = Math.min(1, Math.max(-1, this._panBase + this.driftAt(1, t) * d * 0.18));
+      this.engine.ramp(this.panner.pan, pan, 0.3);
+    }
+    this.applyDrift(d, t);
+  }
+
   setCommon(key, value) {
     this.common[key] = value;
-    if (key === 'reverbSend') this.applySend();
-    if (key === 'delaySend') this.engine.ramp(this.delaySend.gain, value);
+    if (key === 'reverbSend' || key === 'delaySend') this.applySend();
   }
 
   setParam(key, value) {
@@ -225,6 +316,8 @@ export class Voice {
       this.meter.disconnect();
       this.levelGain.disconnect();
       this.toneFilter.disconnect();
+      this.loShelf.disconnect();
+      this.hiShelf.disconnect();
       if (this.panner) this.panner.disconnect();
       this.dryGain.disconnect();
       this.reverbSend.disconnect();

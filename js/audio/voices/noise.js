@@ -79,9 +79,21 @@ export class NoiseVoice extends Voice {
     this.lfo = this.band = this.makeup = this.trem = this.lfoGain = null;
   }
 
+  // 帯域の中心を超低速で動かす。風向きが変わるくらいの速さ。
+  applyDrift(d, t) {
+    this._driftCents = this.driftAt(2, t) * d * 0.35;
+    this._applyCenter(0.4);
+  }
+
+  _applyCenter(tc) {
+    if (!this.band) return;
+    const hz = this.params.center * Math.pow(2, this._driftCents || 0);
+    this.engine.ramp(this.band.frequency, Math.min(18000, Math.max(20, hz)), tc);
+  }
+
   applyParam(key) {
     if (!this.band) return;
-    if (key === 'center') this.engine.ramp(this.band.frequency, this.params.center, 0.05);
+    if (key === 'center') this._applyCenter(0.05);
     if (key === 'q') {
       this.engine.ramp(this.band.Q, this.params.q, 0.05);
       this.engine.ramp(this.makeup.gain, makeup(this.params.q), 0.05);
