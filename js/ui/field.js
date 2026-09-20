@@ -191,11 +191,12 @@ export function createField(el, app) {
     return { el: dot, body };
   }
 
+  // 星に対する指の操作は、選ぶことと動かすことだけ。削除はパネルの「削除」が持つ。
+  // 盤面に見えない操作（長押し、盤面外へ投げる）は置かない。
   function bindDot(dot, id) {
     const v0 = () => app.find(id);
     let mode = null;
     let moved = false;
-    let longTimer = null;
     let wasSelected = false;
     let startX = 0;
     let startY = 0;
@@ -214,20 +215,11 @@ export function createField(el, app) {
       startX = e.clientX;
       startY = e.clientY;
       app.select(id);
-      longTimer = setTimeout(() => {
-        longTimer = null;
-        mode = null;
-        askDelete(id);
-      }, 620);
     });
 
     dot.addEventListener('pointermove', (e) => {
       if (!mode) return;
-      if (Math.hypot(e.clientX - startX, e.clientY - startY) > 7) {
-        moved = true;
-        clearTimeout(longTimer);
-        longTimer = null;
-      }
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) > 7) moved = true;
       if (!moved) return;
       const v = v0();
       if (!v || v.orbit) return; // 周回中の位置は軌道が決める
@@ -236,21 +228,10 @@ export function createField(el, app) {
       app.moveTo(id, u.x, u.y);
     });
 
-    const finish = (e) => {
+    const finish = () => {
       dot.classList.remove('grabbing');
-      clearTimeout(longTimer);
-      longTimer = null;
       if (!mode) return;
       mode = null;
-      const rect = el.getBoundingClientRect();
-      const out =
-        e.clientX < rect.left - 4 || e.clientX > rect.right + 4 ||
-        e.clientY < rect.top - 4 || e.clientY > rect.bottom + 4;
-      const vv = v0();
-      if (moved && out && vv && !vv.orbit) {
-        app.remove(id); // 盤面外に投げたら削除。周回中は指に付いてこないので対象外。
-        return;
-      }
       // 動かさずに離したとき、既に選ばれていた星なら選択を外す。
       // 核を中心に全体を眺める状態へ戻れるようにする。
       if (!moved && wasSelected) app.select(null);

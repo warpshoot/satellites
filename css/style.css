@@ -513,7 +513,9 @@ input[type=range]::-moz-range-thumb {
 .ctrl.disabled input[type=range],
 .ctrl.disabled .seg { pointer-events: none; }
 
-.ctrl-head label { cursor: pointer; }
+/* label[for] は読み上げのための紐付けであって、押せる場所ではない。
+   range のラベルを押しても何も起きないので、指の形を変えない。 */
+.ctrl-head label { cursor: default; }
 
 .solo-bar {
   position: absolute;
