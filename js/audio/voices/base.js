@@ -29,6 +29,21 @@ export function tiltFromY(y) {
   return Math.min(1, Math.max(0, y)) * 2 - 1;
 }
 
+// 面から浮いた分。距離にはすでに入っているが、方向としては何も言っていない。
+// 円軌道を倒しても核からの距離は変わらないので、傾斜は音にほとんど出てこない。
+// |z| で直接音を減らして送りを増やし（にじむ）、符号で前後を分ける（奥は暗い）。
+export const LIFT_FULL = 0.5; // この高さで効きが振り切る
+
+export function liftAmount(z) {
+  return Math.min(1, Math.abs(z || 0) / LIFT_FULL);
+}
+
+export const LIFT_DRY = 0.35;   // 浮くほど直接音を削る
+export const LIFT_WET = 0.9;    // 浮くほど送りを増やす
+export const LIFT_PREDELAY = 0.03; // 送りだけを遅らせて面から剥がす（秒）
+export const BACK_DB = -4.5;    // 奥は高域が落ちる
+export const FRONT_DB = 1.5;    // 手前はわずかに前に出る
+
 // 距離による空気の吸収。核から離れるほど高域が先に落ちる。
 export function airHzFromNear(near) {
   const n = Math.min(1, Math.max(0, near));
@@ -64,6 +79,9 @@ export class Voice {
     this.disposed = false;
     this._airHz = 1000;
     this._panBase = 0;
+    this._tilt = 0;
+    this._lift = 0;
+    this._backDb = 0;
     this._lastEvolve = -1e9;
     this._driftWasOn = false;
     this._initDrift();
@@ -114,6 +132,11 @@ export class Voice {
     this.delaySend = ctx.createGain();
     this.delaySend.gain.value = this._wetGain(this.common.delaySend, false);
 
+    // 浮いた星の送りだけを遅らせる。ドライには掛けない。
+    // ドライを片側だけずらすとモノで合わせたときに櫛状に穴が開く。
+    this.liftDelay = ctx.createDelay(0.1);
+    this.liftDelay.delayTime.value = 0;
+
     this.envGain.connect(this.muteGain);
     this.muteGain.connect(this.meter);
     this.muteGain.connect(this.toneFilter);
@@ -127,7 +150,8 @@ export class Voice {
     this.levelGain.connect(this.dryGain);
 
     this.dryGain.connect(engine.masterBus);
-    this.reverbSend.connect(engine.reverbInput);
+    this.reverbSend.connect(this.liftDelay);
+    this.liftDelay.connect(engine.reverbInput);
     this.delaySend.connect(engine.delayInput);
 
     // サブクラスが音源を差し込む先
@@ -224,12 +248,13 @@ export class Voice {
   }
 
   applyLevel() {
-    this.engine.ramp(this.levelGain.gain, this.vol * gainFromNear(this.near));
+    const lift = 1 - LIFT_DRY * this._lift;
+    this.engine.ramp(this.levelGain.gain, this.vol * gainFromNear(this.near) * lift);
   }
 
   _wetGain(knob, withDistance) {
     const amount = withDistance ? Math.min(1, knob + distanceSend(this.near)) : knob;
-    return amount * this.vol * wetFromNear(this.near);
+    return amount * this.vol * wetFromNear(this.near) * (1 + LIFT_WET * this._lift);
   }
 
   applySend() {
@@ -243,11 +268,28 @@ export class Voice {
     this._y = y;
     this._panBase = Math.min(1, Math.max(-1, x * 2 - 1));
     if (this.panner) this.engine.ramp(this.panner.pan, this._panBase);
-    const tilt = tiltFromY(y);
-    this.engine.ramp(this.loShelf.gain, -tilt * TILT_DB, 0.05);
-    this.engine.ramp(this.hiShelf.gain, tilt * TILT_DB, 0.05);
+    this._tilt = tiltFromY(y);
+    this.applyShelves();
     this._airHz = airHzFromNear(this.near);
     this.applyTone(this._airHz);
+  }
+
+  // 縦位置の傾きと、面の前後を同じシェルフで受ける。
+  // 低域は前後で動かさない。奥に行くほど落ちるのは高域だけ。
+  applyShelves() {
+    this.engine.ramp(this.loShelf.gain, -this._tilt * TILT_DB, 0.05);
+    this.engine.ramp(this.hiShelf.gain, this._tilt * TILT_DB + this._backDb, 0.05);
+  }
+
+  // 面からの浮き。距離とは別に、にじみ方と前後を決める。
+  setElevation(z) {
+    this._z = z || 0;
+    this._lift = liftAmount(this._z);
+    this._backDb = (this._z < 0 ? BACK_DB : FRONT_DB) * this._lift;
+    this.applyLevel();
+    this.applySend();
+    this.applyShelves();
+    this.engine.ramp(this.liftDelay.delayTime, LIFT_PREDELAY * this._lift, 0.2);
   }
 
   applyTone(hz) {
@@ -321,6 +363,7 @@ export class Voice {
       if (this.panner) this.panner.disconnect();
       this.dryGain.disconnect();
       this.reverbSend.disconnect();
+      this.liftDelay.disconnect();
       this.delaySend.disconnect();
     } catch (e) { /* noop */ }
     this.engine.removeVoice(this);

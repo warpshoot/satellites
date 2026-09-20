@@ -444,6 +444,7 @@ function applyPos(v) {
   voice.setVolume(v.vol != null ? v.vol : 0.85);
   voice.setDistance(nearFromDistance(coreDistance(p)));
   voice.setPosition(p.x, p.y);
+  voice.setElevation(p.zOff); // 面からの浮き。距離には入っているが、方向としては別口
 }
 
 function spawn(data) {
@@ -453,6 +454,7 @@ function spawn(data) {
   const p = app.resolved(data);
   voice.setDistance(nearFromDistance(coreDistance(p)));
   voice.setPosition(p.x, p.y);
+  voice.setElevation(p.zOff);
   voice.setMuted(!app.audible(data.id));
   voice.start();
   return voice;
