@@ -9,20 +9,25 @@
 // ミックスが動く。時間は周回の進み方そのものを伸び縮みさせる。
 
 export const RIBBONS = [
-  // 対数で左右対称にしてある（min * max = 1）。真ん中がちょうど等倍。
-  { key: 'time', label: '時間', min: 0.2, max: 5, lo: '遅い', hi: '速い' },
-  { key: 'gravity', label: '引力', min: 0.4, max: 2.5, lo: '寄る', hi: '散る' }
+  // 時間と引力は対数で左右対称にしてある（min * max = 1）。真ん中が等倍。
+  { key: 'time', label: '時間', min: 0.2, max: 5, scale: 'log', rest: 1, lo: '遅い', hi: '速い' },
+  { key: 'gravity', label: '引力', min: 0.4, max: 2.5, scale: 'log', rest: 1, lo: '寄る', hi: '散る' },
+  // 灼きだけ戻る先が左端。効いていない状態が真ん中にあるのは嘘になる。
+  { key: 'burn', label: '灼く', min: 0, max: 1, scale: 'lin', rest: 0, lo: '澄む', hi: '焦げる' }
 ];
 
-const SPRING = 0.18;   // 1フレームあたり中央へ戻る割合
-const SNAP = 0.004;    // これより近づいたら等倍に吸着させる
+const SPRING = 0.18;   // 1フレームあたり戻る割合
+const SNAP = 0.004;    // これより近づいたら戻り先に吸着させる
 
 function toNorm(r, v) {
-  return Math.log(v / r.min) / Math.log(r.max / r.min);
+  if (r.scale === 'log') return Math.log(v / r.min) / Math.log(r.max / r.min);
+  return (v - r.min) / (r.max - r.min);
 }
 
 function fromNorm(r, n) {
-  return r.min * Math.pow(r.max / r.min, Math.min(1, Math.max(0, n)));
+  const t = Math.min(1, Math.max(0, n));
+  if (r.scale === 'log') return r.min * Math.pow(r.max / r.min, t);
+  return r.min + t * (r.max - r.min);
 }
 
 export function createPerform(el, app) {
@@ -54,15 +59,13 @@ export function createPerform(el, app) {
     const wrap = document.createElement('div');
     wrap.className = 'rib';
 
-    const rh = document.createElement('div');
-    rh.className = 'rib-head';
+    // 名前・トラック・値を1行に詰める。上下に積むと帯が太って盤面を食う。
     const name = document.createElement('span');
+    name.className = 'rib-name';
     name.textContent = r.label;
     const val = document.createElement('span');
     val.className = 'rib-val';
-    rh.appendChild(name);
-    rh.appendChild(val);
-    wrap.appendChild(rh);
+    wrap.appendChild(name);
 
     const track = document.createElement('div');
     track.className = 'rib-track';
@@ -84,9 +87,14 @@ export function createPerform(el, app) {
     track.appendChild(lo);
     track.appendChild(hi);
     wrap.appendChild(track);
+    wrap.appendChild(val);
     el.appendChild(wrap);
 
-    const row = { r, track, fill, thumb, val, active: false };
+    // 戻る先の目印。ここが見えていないと、どこが「効いていない」か分からない。
+    const restN = Math.min(1, Math.max(0, toNorm(r, r.rest)));
+    mid.style.left = (restN * 100).toFixed(2) + '%';
+
+    const row = { r, track, fill, thumb, val, restN, active: false };
     rows.set(r.key, row);
 
     function set(clientX) {
@@ -121,15 +129,14 @@ export function createPerform(el, app) {
   function paint(row) {
     const v = app.perf(row.r.key);
     const n = Math.min(1, Math.max(0, toNorm(row.r, v)));
-    const pct = (n * 100).toFixed(2) + '%';
-    row.thumb.style.left = pct;
-    // 塗りは真ん中から現在地まで。等倍からどちらへ何割ずらしたかを見せる。
-    const a = Math.min(0.5, n);
-    const b = Math.max(0.5, n);
+    row.thumb.style.left = (n * 100).toFixed(2) + '%';
+    // 塗りは戻る先から現在地まで。効いていない場所からどれだけ離れたかを見せる。
+    const a = Math.min(row.restN, n);
+    const b = Math.max(row.restN, n);
     row.fill.style.left = (a * 100).toFixed(2) + '%';
     row.fill.style.width = ((b - a) * 100).toFixed(2) + '%';
-    row.val.textContent = '×' + v.toFixed(2);
-    row.track.classList.toggle('off', Math.abs(n - 0.5) > 0.01);
+    row.val.textContent = row.r.scale === 'log' ? '×' + v.toFixed(2) : v.toFixed(2);
+    row.track.parentNode.classList.toggle('on', Math.abs(n - row.restN) > 0.01);
   }
 
   // 指を離したぶんを中央へ戻す。ぱちんと戻すと音が段差になるので、寄せていく。
@@ -140,11 +147,11 @@ export function createPerform(el, app) {
       if (row.active || hold) continue;
       const r = row.r;
       const n = toNorm(r, app.perf(r.key));
-      if (Math.abs(n - 0.5) < SNAP) {
-        if (app.perf(r.key) !== 1) { app.setPerf(r.key, 1); paint(row); }
+      if (Math.abs(n - row.restN) < SNAP) {
+        if (app.perf(r.key) !== r.rest) { app.setPerf(r.key, r.rest); paint(row); }
         continue;
       }
-      app.setPerf(r.key, fromNorm(r, n + (0.5 - n) * SPRING));
+      app.setPerf(r.key, fromNorm(r, n + (row.restN - n) * SPRING));
       paint(row);
       moving = true;
     }

@@ -39,7 +39,15 @@ export function setAspect(a) {
 // ---- 演奏レイヤー -----------------------------------------------------
 // パッチの値ではなく、位置と時間に掛かる倍率。触っている間だけ効いて
 // 離すと 1.0 に戻る。保存しない（ソロ・ミュートと同じ理由）。
-const perf = { time: 1, gravity: 1 };
+const perf = { time: 1, gravity: 1, burn: 0 };
+
+// 核へ引き寄せるほど、潮汐で千切れはじめる。帯の「灼く」とは入口が2つ
+// あるだけで、行き先はひとつ（engine の灼き段）。
+// 等倍のときは 0 になるので、普通に置いて聴いているぶんには何も起きない。
+function burnAmount() {
+  const tidal = Math.min(1, Math.max(0, (0.62 - perf.gravity) / 0.22)) * 0.55;
+  return Math.min(1, perf.burn + tidal);
+}
 
 // 時間の倍率は currentTime に直接掛けられない。掛けると倍率を動かした
 // 瞬間に位相が飛ぶ。進んだぶんだけ倍率を掛けて積む、別の時計を持つ。
@@ -205,6 +213,7 @@ const app = {
     // 時間は時計の進み方が変わるだけなので、位置を今すぐ引き直す必要はない。
     // 引力は見えている位置そのものが動く。
     if (key === 'gravity') perfApply();
+    if (key !== 'time' && engine.ready) engine.setBurn(burnAmount());
   },
 
   effectivePos(v) {
@@ -557,6 +566,7 @@ const app = {
     if (!engine.ready) return;
     const m = state.patch.master;
     if (!paused) engine.setMasterGain(m.gain); // 停止中に音量を触っても鳴り出さない
+    engine.setBurn(burnAmount());
     engine.setDelayTime(delayMs(m));
     engine.setDelayFeedback(m.delay.feedback);
     engine.setTuning(m.tuning);

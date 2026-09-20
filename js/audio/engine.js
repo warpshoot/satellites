@@ -8,6 +8,40 @@ const HORIZON = 0.1;
 // 20Hz 以下は端末のスピーカーでは鳴らないのに、リミッタのヘッドルームだけ食う。
 const RUMBLE_HZ = 30;
 
+// ---- 灼き（マスターの飽和）-------------------------------------------
+// 演奏の帯から振る歪み。リミッタの手前に置くので、暴れても頭は押さえられる。
+//
+// ドライと混ぜる作りにはしない。WaveShaper は 4x オーバーサンプルで
+// わずかに遅れるため、素の音と足すと端末のモノスピーカーで櫛状に穴が開く。
+// 代わりに、曲線そのものを「効かないときは y = x」にしてある。
+const BURN_N = 2048;
+const BURN_STEPS = 24;      // 曲線はこの段数に丸めて使い回す
+const BURN_REF = 0.3;       // この高さの信号の通り方を揃えて音量差を消す
+const BURN_DRIVE = 8;       // 振り切ったときに何倍突っ込むか
+
+// 膝は平方根で、突っ込む量は線形で降ろす。両方を線形にすると帯の左半分が
+// 素通しのままで、右の端に来てからいきなり潰れる。実測の THD（入力 0.45）で
+// 0 → 3.4 → 18.9 → 26.5 → 31.0 → 34.5 → 36.5%。
+
+// |x| が膝 k を超えたところからだけ寝かせる。k = 1 なら素通し。
+function burnAt(x, k) {
+  const a = Math.abs(x);
+  const y = a <= k ? a : k + (1 - k) * Math.tanh((a - k) / (1 - k));
+  return x < 0 ? -y : y;
+}
+
+function burnShape(amount) {
+  const k = 1 - 0.98 * Math.sqrt(amount);
+  const drive = 1 + BURN_DRIVE * amount;
+  const curve = new Float32Array(BURN_N);
+  for (let i = 0; i < BURN_N; i++) {
+    curve[i] = burnAt((i * 2) / (BURN_N - 1) - 1, k);
+  }
+  // 基準の高さだけは前後で揃える。揃えないと歪みのノブが音量のノブになる。
+  const ref = burnAt(Math.min(1, drive * BURN_REF), k);
+  return { curve, drive, out: ref > 0 ? BURN_REF / ref : 1 };
+}
+
 export class Engine {
   constructor() {
     this.ctx = null;
@@ -49,8 +83,22 @@ export class Engine {
     this.masterGain = ctx.createGain();
     this.masterGain.gain.value = 0.8;
 
+    // 灼き段。曲線は amount 0 のとき y = x なので、既定では何もしない。
+    this.burnIn = ctx.createGain();
+    this.burnIn.gain.value = 1;
+    this.burnShaper = ctx.createWaveShaper();
+    this.burnShaper.oversample = '4x'; // 落とすとエイリアスが不快に出る
+    this.burnOut = ctx.createGain();
+    this.burnOut.gain.value = 1;
+    this._burnStep = -1;
+    this._burnCache = new Map();
+    this.setBurn(0);
+
     this.masterBus.connect(this.rumble);
-    this.rumble.connect(this.limiter);
+    this.rumble.connect(this.burnIn);
+    this.burnIn.connect(this.burnShaper);
+    this.burnShaper.connect(this.burnOut);
+    this.burnOut.connect(this.limiter);
     this.limiter.connect(this.masterGain);
     this.masterGain.connect(ctx.destination);
 
@@ -127,6 +175,25 @@ export class Engine {
   // ---- master -------------------------------------------------------
   setMasterGain(v) {
     this.ramp(this.masterGain.gain, v, 0.05);
+  }
+
+  // 灼きの深さ 0〜1。曲線の差し替えは段が変わったときだけ。
+  // 突っ込む量と戻す量はランプで動かす（直接代入はクリックになる）。
+  setBurn(amount) {
+    if (!this.ctx) return;
+    const a = Math.min(1, Math.max(0, amount || 0));
+    const step = Math.round(a * BURN_STEPS);
+    let shape = this._burnCache.get(step);
+    if (!shape) {
+      shape = burnShape(step / BURN_STEPS);
+      this._burnCache.set(step, shape);
+    }
+    if (step !== this._burnStep) {
+      this._burnStep = step;
+      this.burnShaper.curve = shape.curve;
+    }
+    this.ramp(this.burnIn.gain, shape.drive, 0.05);
+    this.ramp(this.burnOut.gain, shape.out, 0.05);
   }
 
   // IR の再生成は音が途切れる。ドラッグ中は呼ばず、離したときに一度だけ。

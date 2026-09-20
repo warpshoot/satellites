@@ -622,10 +622,11 @@ input[type=range]::-moz-range-thumb {
 
 /* ---- 演奏の帯 ----
    触っている間だけ効く倍率。パッチの値には触らないので、
-   ここを何度振っても配置は壊れない。保存もしない。 */
+   ここを何度振っても配置は壊れない。保存もしない。
+   盤面を食わないよう、1本を1行に詰めてある。 */
 #perform {
   flex: 0 0 auto;
-  padding: 7px 12px 10px;
+  padding: 6px 12px 9px;
   border-top: 1px solid var(--line);
   background: rgba(10, 12, 18, 0.72);
 }
@@ -634,7 +635,7 @@ input[type=range]::-moz-range-thumb {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .perf-title {
@@ -643,24 +644,37 @@ input[type=range]::-moz-range-thumb {
   color: var(--dim);
 }
 
-.perf-head .chip { margin-left: auto; padding: 3px 10px; font-size: 10px; }
+.perf-head .chip { margin-left: auto; padding: 2px 10px; font-size: 10px; }
 
-.rib + .rib { margin-top: 7px; }
-
-.rib-head {
+.rib {
   display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--dim);
-  margin-bottom: 3px;
+  align-items: center;
+  gap: 8px;
 }
 
-.rib-val { font-variant-numeric: tabular-nums; }
+.rib + .rib { margin-top: 5px; }
+
+.rib-name {
+  flex: 0 0 auto;
+  width: 26px;
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.rib-val {
+  flex: 0 0 auto;
+  width: 40px;
+  text-align: right;
+  font-size: 10px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
 
 /* 掴む高さは見た目より広く取る。指で狙う帯なので細いと外れる。 */
 .rib-track {
   position: relative;
-  height: 26px;
+  flex: 1 1 auto;
+  height: 24px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
   touch-action: none;
@@ -670,7 +684,7 @@ input[type=range]::-moz-range-thumb {
 
 .rib-track.held { background: rgba(255, 255, 255, 0.09); }
 
-/* 等倍の目印。戻ってくる場所が見えていないと、どこがゼロか分からない。 */
+/* 戻ってくる場所の目印。位置は JS が刺す（灼くだけ左端に戻る）。 */
 .rib-mid {
   position: absolute;
   left: 50%;
@@ -709,4 +723,4 @@ input[type=range]::-moz-range-thumb {
 
 .rib-end.lo { left: 8px; }
 .rib-end.hi { right: 8px; }
-.rib-track.off .rib-val { color: #cfdcff; }
+.rib.on .rib-val { color: #cfdcff; }
