@@ -175,6 +175,44 @@ export function save() {
   }, 500);
 }
 
+// ---- 持ち込み／退避 --------------------------------------------------
+const BACKUP_KEY = 'satellites.patch.backup';
+
+// 外から来たパッチを state に載せる。中身の検査は保存の読み込みと同じ関門を通す。
+export function setPatch(raw) {
+  state.patch = sanitize(raw);
+  state.selectedId = null;
+  return state.patch;
+}
+
+// リンクで上書きする前に、いま保存されているものを退避する
+export function backupCurrent() {
+  try {
+    const cur = localStorage.getItem(KEY);
+    if (cur) localStorage.setItem(BACKUP_KEY, cur);
+  } catch (e) { /* 使えなければ諦める */ }
+}
+
+export function hasBackup() {
+  try {
+    return !!localStorage.getItem(BACKUP_KEY);
+  } catch (e) {
+    return false;
+  }
+}
+
+// 戻したら退避は消す。2つ前には戻れない、という約束にしておく。
+export function takeBackup() {
+  try {
+    const raw = localStorage.getItem(BACKUP_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(BACKUP_KEY);
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
 export function findVoice(id) {
   return state.patch.voices.find((v) => v.id === id) || null;
 }

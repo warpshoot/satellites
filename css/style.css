@@ -572,3 +572,29 @@ input[type=range]::-moz-range-thumb {
   #field { flex: 1 1 auto; border-bottom: 0; border-right: 1px solid var(--line); }
   #panel { flex: 0 0 340px; }
 }
+
+.patch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+
+.patch-row .chip { flex: 1 1 auto; }
+
+.patch-box {
+  width: 100%;
+  min-height: 74px;
+  margin-top: 2px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  resize: vertical;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.patch-box.hidden { display: none; }
+
+.patch-file { display: none; }

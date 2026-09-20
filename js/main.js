@@ -1,6 +1,9 @@
 import { engine } from './audio/engine.js';
 import { createVoice, voiceClass } from './audio/voices/registry.js';
-import { state, loadPatch, save, newVoiceData, findVoice, MAX_VOICES } from './state.js';
+import { state, loadPatch, save, newVoiceData, findVoice, MAX_VOICES,
+  setPatch, backupCurrent, hasBackup, takeBackup } from './state.js';
+import { patchLink, patchText, parseIncoming, copyText,
+  savePatchFile, readPatchFile } from './patchio.js';
 import { createField } from './ui/field.js';
 import { createPanel } from './ui/panel.js';
 import { createStrip } from './ui/strip.js';
@@ -391,6 +394,79 @@ const app = {
     save();
   },
 
+  // ---- 持ち出しと持ち込み -------------------------------------------
+  hasBackup: () => hasBackup(),
+
+  async copyPatch() {
+    const text = patchText(state.patch);
+    const ok = await copyText(text);
+    this.notice(ok ? 'コピーした' : 'コピーできなかった');
+    return ok ? null : text; // 失敗したら呼んだ側が手で選ばせる
+  },
+
+  async copyLink() {
+    try {
+      const url = await patchLink(state.patch);
+      const ok = await copyText(url);
+      this.notice(ok ? 'リンクをコピーした' : 'コピーできなかった');
+      return ok ? null : url;
+    } catch (e) {
+      this.notice('リンクを作れなかった');
+      return null;
+    }
+  },
+
+  // 貼り付けられた文字列を読む。リンクでも JSON でも受ける。
+  async loadText(text) {
+    let raw;
+    try {
+      raw = await parseIncoming(text);
+    } catch (e) {
+      this.notice('読めなかった');
+      return false;
+    }
+    backupCurrent();
+    setPatch(raw);
+    swapVoices();
+    save();
+    this.notice('読み込んだ');
+    return true;
+  },
+
+  saveFile() {
+    try {
+      const name = savePatchFile(state.patch);
+      this.notice(name + ' を書き出した');
+    } catch (e) {
+      this.notice('書き出せなかった');
+    }
+  },
+
+  async loadFile(file) {
+    let raw;
+    try {
+      raw = await readPatchFile(file);
+    } catch (e) {
+      this.notice('ファイルを読めなかった');
+      return false;
+    }
+    backupCurrent();
+    setPatch(raw);
+    swapVoices();
+    save();
+    this.notice((file.name || 'ファイル') + ' を読み込んだ');
+    return true;
+  },
+
+  restoreBackup() {
+    const raw = takeBackup();
+    if (!raw) return this.notice('戻す先が無い');
+    setPatch(raw);
+    swapVoices();
+    save();
+    this.notice('前の配置に戻した');
+  },
+
   sky: () => state.patch.master.sky,
   cameraFollow: () => state.patch.master.follow,
 
@@ -437,6 +513,21 @@ function applyAudible() {
   redraw();
 }
 
+// パッチを丸ごと入れ替える。鳴っている音は release で消し、新しい配置を立ち上げる。
+function swapVoices() {
+  for (const voice of live.values()) voice.stop();
+  live.clear();
+  muted.clear();
+  soloed.clear();
+  lastVoiceId = null;
+  if (started) {
+    app.applyMaster(true);
+    for (const data of state.patch.voices) spawn(data);
+  }
+  redraw();
+  field.layout();
+}
+
 function applyPos(v) {
   const voice = live.get(v.id);
   if (!voice) return;
@@ -466,6 +557,29 @@ const strip = createStrip(starsEl, app);
 
 loadPatch();
 redraw();
+
+// リンクで開かれたときは、そちらに乗り換える。前の配置は退避しておく。
+// 展開は非同期なので、先に保存ぶんを出してから差し替える。
+async function loadFromHash() {
+  const m = location.hash.match(/^#p=([A-Za-z0-9\-_]+)$/);
+  if (!m) return;
+  // 読んだらハッシュは落とす。読み込み直すたびに編集が巻き戻るのを避ける。
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    const raw = await parseIncoming(m[1]);
+    backupCurrent();
+    setPatch(raw);
+    save();
+    swapVoices();
+    app.notice('リンクの配置を読み込んだ');
+  } catch (e) {
+    app.notice('リンクを読めなかった');
+  }
+}
+
+loadFromHash();
+// 開いたままのタブにリンクを流し込まれた場合、ハッシュだけが変わって再読み込みは起きない
+window.addEventListener('hashchange', loadFromHash);
 
 // 周回の計算は 10Hz で十分。毎フレームは回さない。
 setInterval(() => {
