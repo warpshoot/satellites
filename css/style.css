@@ -615,14 +615,16 @@ input[type=range]::-moz-range-thumb {
   #panel { grid-column: 2; grid-row: 2; min-height: 0; }
 }
 
-/* 値でもノブでもない、ただの読み取り。行の高さは1行に保つ。 */
+/* 値でもノブでもない、生きている読み取り。1秒ごとに書き替わる。行は1行に保つ。 */
 .readout { font-size: 11px; color: var(--dim); padding: 2px 0 6px; }
-.patch-row .readout { padding: 0; align-self: center; }
+
+/* 動かない添え書き。見た目は読み取りと同じだが役割が違うので札を分ける。 */
+.note { font-size: 11px; color: var(--dim); }
 
 .patch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 
 .patch-row .chip { flex: 1 1 auto; }
-.patch-row .readout { flex: 2 1 auto; }
+.patch-row .note { flex: 2 1 auto; align-self: center; }
 
 .patch-box {
   width: 100%;

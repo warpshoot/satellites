@@ -73,7 +73,7 @@ function randomSection(app, ui) {
   b.addEventListener('click', () => app.randomizeAll());
   row.appendChild(b);
   const hint = document.createElement('span');
-  hint.className = 'readout';
+  hint.className = 'note'; // 動かない添え書き。生きている readout とは別物。
   hint.textContent = '置いた場所と周回は動かない';
   row.appendChild(hint);
   sec.appendChild(row);

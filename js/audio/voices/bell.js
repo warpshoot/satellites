@@ -9,10 +9,9 @@ import { quantize } from '../music.js';
 // 「正解の比を知っている人だけが当てられるノブ」になるため。
 
 // ラベルは比そのもの。1 は整数比なので、これだけ倍音が音程に乗る。
+// 比だけ並べる。一部にだけ「（鐘）」のような添え書きを付けていたが、
+// 5つ中3つという中途半端が一番読みにくい。音の性格は押せば分かる。
 const RATIOS = ['1', '1.41', '2', '2.76', '3.5'];
-const RATIO_LABELS = {
-  '1': '1（澄む）', '1.41': '1.41', '2': '2', '2.76': '2.76（鐘）', '3.5': '3.5（金属）'
-};
 
 export class BellVoice extends Voice {
   static type = 'bell';
@@ -39,7 +38,7 @@ export class BellVoice extends Voice {
     { key: 'jitter', label: 'ばらつき', min: 0, max: 100, scale: 'pow', unit: '%' },
     { key: 'center', label: 'ピッチ', min: 80, max: 2000, scale: 'log', unit: 'Hz', note: true },
     { key: 'spread', label: 'ピッチ幅', min: 0, max: 2400, scale: 'pow', unit: 'cent' },
-    { key: 'ratio', label: 'モジュレータ比', type: 'select', options: RATIOS, labels: RATIO_LABELS },
+    { key: 'ratio', label: 'モジュレータ比', type: 'select', options: RATIOS },
     { key: 'index', label: 'モジュレーション', min: 0, max: 10, scale: 'pow' },
     { key: 'decay', label: '減衰', min: 0.2, max: 12, scale: 'log', unit: 's' },
     { key: 'width', label: 'ステレオ幅', min: 0, max: 1, scale: 'lin' }
