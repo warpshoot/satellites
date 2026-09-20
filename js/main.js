@@ -7,7 +7,6 @@ import { patchLink, patchText, parseIncoming, copyText,
 import { PRESETS } from './presets.js';
 import { COMMON_PARAMS } from './audio/voices/base.js';
 import { createField } from './ui/field.js';
-import { createPerform } from './ui/perform.js';
 import { createPanel, randomFor } from './ui/panel.js';
 import { createStrip } from './ui/strip.js';
 
@@ -17,7 +16,6 @@ const starsEl = document.getElementById('stars');
 const gateEl = document.getElementById('gate');
 const noticeEl = document.getElementById('notice');
 const transportEl = document.getElementById('transport');
-const performEl = document.getElementById('perform');
 
 const live = new Map();   // id -> Voice
 const muted = new Set();  // 保存しない。次に開いて無音だと壊れたように見える。
@@ -37,15 +35,6 @@ let aspect = 1;
 export function setAspect(a) {
   if (a > 0) aspect = a;
 }
-
-// ---- 演奏レイヤー -----------------------------------------------------
-// 触っている間だけ効いて、離すと戻る。保存しない（ソロ・ミュートと同じ理由）。
-//
-// 「時間」と「引力」もここに置いていたが、外した。どちらも既にあるものを
-// 一様に拡大縮小するだけで、速くなるか遅くなるか、大きくなるか小さくなるか
-// しか起きない。振っても音の性格が変わらないので、動かして面白くなかった。
-// 残したのは灼きだけ。ここに足すなら、量ではなく質を変えるものにすること。
-const perf = { burn: 0 };
 
 // 面から浮く量。盤面の横幅 1 に対してどれだけ動かすか。
 const Z_GAIN = 0.85;
@@ -176,15 +165,6 @@ const app = {
 
   resolved(v) {
     return resolve(v, engine.now());
-  },
-
-  // ---- 演奏レイヤー ---------------------------------------------------
-  perf: (key) => perf[key],
-
-  setPerf(key, value) {
-    if (!(key in perf) || !isFinite(value)) return;
-    perf[key] = value;
-    if (engine.ready) engine.setBurn(perf.burn);
   },
 
   effectivePos(v) {
@@ -540,7 +520,7 @@ const app = {
     if (!engine.ready) return;
     const m = state.patch.master;
     if (!paused) engine.setMasterGain(m.gain); // 停止中に音量を触っても鳴り出さない
-    engine.setBurn(perf.burn);
+    engine.setBurn(m.burn);
     engine.setDelayTime(delayMs(m));
     engine.setDelayFeedback(m.delay.feedback);
     engine.setTuning(m.tuning);
@@ -627,7 +607,6 @@ function spawn(data) {
 }
 
 const field = createField(fieldEl, app);
-const perform = createPerform(performEl, app);
 const panel = createPanel(panelEl, app);
 const strip = createStrip(starsEl, app);
 

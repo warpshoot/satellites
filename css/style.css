@@ -27,18 +27,10 @@ body {
   height: 100%;
 }
 
-/* 盤面と演奏の帯はひとつの塊。縦でも横でも、この2つは必ず縦に積む。 */
-#stage {
-  flex: 0 0 62%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
 /* ---- 盤面 ---- */
 #field {
   position: relative;
-  flex: 1 1 auto;
+  flex: 0 0 58%;
   overflow: hidden;
   touch-action: none;
   background:
@@ -592,9 +584,10 @@ input[type=range]::-moz-range-thumb {
     grid-template-columns: 1fr 340px;
     grid-template-rows: auto minmax(0, 1fr);
   }
-  #stage {
+  #field {
     grid-column: 1;
     grid-row: 1 / span 2;
+    border-bottom: 0;
     border-right: 1px solid var(--line);
   }
   #stars { grid-column: 2; grid-row: 1; }
@@ -626,132 +619,3 @@ input[type=range]::-moz-range-thumb {
 .patch-box.hidden { display: none; }
 
 .patch-file { display: none; }
-
-
-/* ---- 演奏の帯 ----
-   触っている間だけ効いて、離すと効かない側へ寄り戻る。パッチの値には
-   触らないので、何度振っても配置は壊れない。保存もしない。
-   常時開いていると盤面を食うので、既定では見出しだけに畳んである。 */
-#perform {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--line);
-  background: rgba(10, 12, 18, 0.72);
-}
-
-/* 見出しそのものが開閉のボタン。細いので掴む幅は行いっぱいに取る。 */
-.perf-head {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 8px 12px;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  color: inherit;
-}
-
-.perf-title {
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  color: var(--dim);
-}
-
-.perf-mark {
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--dim);
-}
-
-#perform.open .perf-title { color: var(--text); }
-
-.perf-body { display: none; }
-
-#perform.open .perf-body {
-  display: block;
-  padding: 0 12px 10px;
-}
-
-.perf-hold {
-  margin-top: 7px;
-  padding: 3px 12px;
-  font-size: 10px;
-}
-
-.rib {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.rib + .rib { margin-top: 5px; }
-
-.rib-name {
-  flex: 0 0 auto;
-  width: 26px;
-  font-size: 10px;
-  color: var(--dim);
-}
-
-.rib-val {
-  flex: 0 0 auto;
-  width: 40px;
-  text-align: right;
-  font-size: 10px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 掴む高さは見た目より広く取る。指で狙う帯なので細いと外れる。 */
-.rib-track {
-  position: relative;
-  flex: 1 1 auto;
-  height: 28px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  touch-action: none;
-  cursor: ew-resize;
-  overflow: hidden;
-}
-
-.rib-track.held { background: rgba(255, 255, 255, 0.09); }
-
-/* 戻ってくる場所の目印。位置は JS が刺す。 */
-.rib-mid {
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.rib-fill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(224, 119, 111, 0.22);
-}
-
-.rib-thumb {
-  position: absolute;
-  top: 2px;
-  bottom: 2px;
-  width: 3px;
-  margin-left: -1.5px;
-  border-radius: 2px;
-  background: #f0cfc9;
-  box-shadow: 0 0 10px rgba(224, 119, 111, 0.55);
-}
-
-.rib-end {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.22);
-  pointer-events: none;
-}
-
-.rib-end.lo { left: 8px; }
-.rib-end.hi { right: 8px; }
-.rib.on .rib-val { color: #f0cfc9; }

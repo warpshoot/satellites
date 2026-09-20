@@ -136,6 +136,7 @@ export const PRESETS = [
         tuning: { root: 'E', scale: 'fifths' },
         reverb: { length: 4, decay: 4.5 },
         delay: { time: 180, feedback: 0.6, sync: true },
+        burn: 0.45,
         pulse: true, sky: 'noise', follow: false
       },
       voices: [

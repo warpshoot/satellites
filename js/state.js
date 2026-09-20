@@ -23,6 +23,7 @@ export const MASTER_DEFAULTS = {
   tuning: Object.assign({}, TUNING_DEFAULTS),
   reverb: { length: 3.0, decay: 2.5 },
   delay: { time: 420, feedback: 0.35, sync: true },
+  burn: 0,       // マスターの飽和。0 は曲線が恒等なので厳密に素通し。
   pulse: true,  // 音に合わせて星を動かすか
   sky: 'noise', // 背景の星の種類
   follow: false // 選んだ星を画面の中心に置くか
@@ -37,6 +38,7 @@ export const MASTER_PARAMS = [
   { path: 'delay.time', label: 'ディレイ時間', min: 50, max: 2000, scale: 'log', unit: 'ms' },
   { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'pow' },
   { path: 'delay.sync', label: 'ディレイを周回に合わせる', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } },
+  { path: 'burn', label: '灼き（歪み）', min: 0, max: 1, scale: 'lin' },
   { path: 'pulse', label: '音に合わせて星を動かす', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } },
   { path: 'sky', label: '背景の星', type: 'select', options: SKY_STYLES, labels: SKY_LABELS, visual: true },
   { path: 'follow', label: '選んだ星を中心に置く', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' }, visual: true }
@@ -108,6 +110,8 @@ function sanitize(raw) {
         ? !!raw.master.delay.sync
         : raw.version >= 3 && MASTER_DEFAULTS.delay.sync
     },
+    // 旧いパッチには無いので 0（素通し）に落ちる
+    burn: Math.min(1, Math.max(0, num(raw.master && raw.master.burn, MASTER_DEFAULTS.burn))),
     pulse: raw.master && raw.master.pulse != null ? !!raw.master.pulse : true,
     sky: raw.master && SKY_STYLES.includes(raw.master.sky) ? raw.master.sky : 'noise',
     follow: !!(raw.master && raw.master.follow)
