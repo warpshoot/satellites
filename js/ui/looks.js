@@ -17,24 +17,19 @@ export function lookOf(id) {
   return LOOKS.find((l) => l.id === id) || LOOKS[0];
 }
 
-// 背景の星。ノイズは一様に細かく、まばらは粒が大きく数が少ない。
-export const SKY_STYLES = ['noise', 'sparse', 'none'];
-export const SKY_LABELS = { noise: 'ノイズ', sparse: 'まばら', none: 'なし' };
+// 背景。2択だけ持つ。「宇宙」は星と星雲、「なし」は真っ黒。
+// 中間（まばら）は宇宙の薄い版でしかなく、選ぶ理由を作れなかったので捨てた。
+export const SKY_STYLES = ['noise', 'none'];
+export const SKY_LABELS = { noise: '宇宙', none: 'なし' };
 
 export function skySvg(style) {
   if (style === 'none') return '<svg class="sky" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>';
-  const sparse = style === 'sparse';
-  const n = sparse ? 90 : 460;
   const out = [];
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < 460; i++) {
     const x = (Math.random() * 1000).toFixed(1);
     const y = (Math.random() * 1000).toFixed(1);
-    const r = sparse
-      ? (0.8 + Math.pow(Math.random(), 2) * 1.6).toFixed(2)
-      : (0.35 + Math.pow(Math.random(), 3) * 0.9).toFixed(2);
-    const o = sparse
-      ? (0.16 + Math.random() * 0.48).toFixed(2)
-      : (0.07 + Math.random() * 0.38).toFixed(2);
+    const r = (0.35 + Math.pow(Math.random(), 3) * 0.9).toFixed(2);
+    const o = (0.07 + Math.random() * 0.38).toFixed(2);
     out.push('<circle cx="' + x + '" cy="' + y + '" r="' + r + '" opacity="' + o + '"/>');
   }
   return '<svg class="sky" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +

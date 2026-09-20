@@ -99,7 +99,9 @@ export function newVoiceData(type, x, y) {
     x, y,
     look: V.look,  // 見た目。種類ごとの既定だが、あとから選び直せる。
     vol: 0.85,     // 星自身の音量。距離による減り方とは別。
-    orbit: false,
+    // 置いたら回りはじめる。止まっている星は「衛星」に見えない。
+    // 半径と位相は置いた場所から app.add() が割り出す。
+    orbit: true,
     orbitPeriod: Math.round(30 + Math.random() * 120), // 星ごとに散らす。揃うと動きが噛み合う
     orbitRadius: null, // 周回を入れたときに現在地から割り出す
     orbitPhase: 0,

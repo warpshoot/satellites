@@ -52,6 +52,8 @@ export function createField(el, app) {
     skyStyle = app.sky();
     const old = el.querySelector('.sky');
     if (old) old.remove();
+    // 「なし」は星を消すだけでなく星雲と縁の陰も落とす。中途半端に暗いより真っ黒。
+    el.classList.toggle('sky-none', skyStyle === 'none');
     el.insertAdjacentHTML('afterbegin', skySvg(skyStyle));
   }
   renderSky();

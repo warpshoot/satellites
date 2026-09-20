@@ -58,7 +58,7 @@ export const PRESETS = [
         tuning: { root: 'A', scale: 'inSen' },
         reverb: { length: 13, decay: 1.6 },
         delay: { time: 900, feedback: 0.5, sync: false },
-        pulse: true, sky: 'sparse', follow: false
+        pulse: true, sky: 'noise', follow: false
       },
       voices: [
         v('bell', 0.5, 0.5, {

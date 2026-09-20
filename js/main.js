@@ -281,6 +281,13 @@ const app = {
   add(type, x, y) {
     if (!this.canAdd()) return this.notice('星は8つまで');
     const data = newVoiceData(type, clamp01(x), clamp01(y));
+    // 置いた場所から半径と位相を割り出す。位相は時刻を引いておかないと、
+    // 置いた瞬間に軌道上の別の場所へ飛ぶ。
+    if (data.orbit) {
+      const g = orbitFromPoint(data, data.x, data.y, engine.now());
+      data.orbitRadius = g.rho;
+      data.orbitPhase = g.phase;
+    }
     state.patch.voices.push(data);
     if (started) spawn(data);
     state.selectedId = lastVoiceId = data.id;

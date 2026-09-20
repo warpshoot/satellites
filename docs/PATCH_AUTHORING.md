@@ -119,7 +119,7 @@
 | `delay.sync` | `true` / `false` | `true` | true だと、一番速い星の周回に合わせてディレイ時間が決まり、`delay.time` は無視される |
 | `burn` | 0〜1 | 0 | マスター全体の飽和（歪み）。0 は曲線が恒等なので厳密に素通し |
 | `pulse` | `true` / `false` | `true` | 音に合わせて星を動かすか（見た目だけ） |
-| `sky` | `noise` `sparse` `none` | `noise` | 背景の星（見た目だけ） |
+| `sky` | `noise` `none` | `noise` | 背景。`noise` は星空、`none` は真っ黒（見た目だけ） |
 | `follow` | `true` / `false` | `false` | 選んだ星を画面中心に置くか（見た目だけ） |
 
 **`burn` は全部が混ざってから掛かる。** リバーブとディレイの尾も一緒に歪む。
@@ -164,7 +164,7 @@ GRAIN の粒ごとの音程。デチューンは吸着しない（潰すと重�
 | `x` `y` | 0〜1 | — | 盤面の位置。核は `(0.5, 0.5)` |
 | `look` | `solid` `ring` `hollow` `crescent` `band` `binary` | 種別ごと | 見た目だけ。音には無関係 |
 | `vol` | 0〜1 | 0.85 | 星自身の音量 |
-| `orbit` | `true` / `false` | `false` | 周回するか |
+| `orbit` | `true` / `false` | `false` | 周回するか。省略すると `false`（画面で置いた星は `true` で始まる） |
 
 `common`（全種別で共通）:
 

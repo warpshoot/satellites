@@ -40,6 +40,10 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
+/* 背景「なし」。星雲も縁の陰も落として真っ黒にする */
+#field.sky-none { background: #000; }
+#field.sky-none::after { background: none; }
+
 /* 背景の星 */
 #field .sky {
   position: absolute;
