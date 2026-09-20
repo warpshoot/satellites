@@ -145,6 +145,8 @@ export function createField(el, app) {
     picker._shownAt = performance.now();
     picker.classList.remove('hidden');
     // 実寸を測ってから寄せる。決め打ちの余白だと盤面の端で種別が切れる。
+    // 幅は CSS 側で固定してある（成り行きにすると、寄せた先の残り幅で
+    // 折り返し直されて、ここで測った寸法が当てにならなくなる）。
     const r = el.getBoundingClientRect();
     const pw = picker.offsetWidth;
     const ph = picker.offsetHeight;
@@ -152,7 +154,21 @@ export function createField(el, app) {
     const my = ph / 2 + 6;
     const pt = project(x, y, r.width, r.height);
     const px = Math.min(Math.max(pt.sx, mx), Math.max(mx, r.width - mx));
-    const py = Math.min(Math.max(pt.sy - ph * 0.9, my), Math.max(my, r.height - my));
+    let py = Math.min(Math.max(pt.sy - ph * 0.9, my), Math.max(my, r.height - my));
+
+    // 停止ボタンは盤面の左上に居座っていて、ピッカーより手前に描かれる。
+    // 重なったままだと、左上の角をタップしたとき1つ目の種別が押せない。
+    // 手前に出すのではなく下へ逃がす。停止ボタンを塞がないほうが筋が通る。
+    const stop = el.querySelector('#transport');
+    if (stop && stop.classList.contains('visible')) {
+      const tb = stop.getBoundingClientRect();
+      const tx = tb.left - r.left;
+      const ty = tb.top - r.top;
+      const hits = px - pw / 2 < tx + tb.width + 6 && px + pw / 2 > tx - 6
+        && py - ph / 2 < ty + tb.height + 6 && py + ph / 2 > ty - 6;
+      if (hits) py = Math.min(ty + tb.height + 6 + ph / 2, Math.max(my, r.height - my));
+    }
+
     picker.style.left = px + 'px';
     picker.style.top = py + 'px';
   }

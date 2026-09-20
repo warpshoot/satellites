@@ -140,24 +140,24 @@ export const PRESETS = [
       },
       voices: [
         v('drive', 0.5, 0.78, {
-          vol: 0.8,
+          vol: 1,
           common: { attack: 8, release: 6, drift: 0.5, reverbSend: 0.2, delaySend: 0.1 },
           params: { freq: 41, drive: 0.62, filterPos: 'post', swellRate: 0.05, swellDepth: 22 }
         }),
         v('drive', 0.5, 0.5, {
-          vol: 0.45, orbit: true, orbitPeriod: 28, orbitRadius: 0.24,
+          vol: 0.75, orbit: true, orbitPeriod: 28, orbitRadius: 0.24,
           orbitEcc: 0.6, orbitAngle: 45, orbitIncl: 85,
           common: { attack: 10, release: 6, drift: 0.7, reverbSend: 0.5, delaySend: 0.35 },
           params: { freq: 110, drive: 0.85, filterPos: 'pre', swellRate: 0.3, swellDepth: 48 }
         }),
         v('drone', 0.5, 0.6, {
-          vol: 0.6,
+          vol: 0.75,
           common: { attack: 16, release: 8, drift: 0.45, reverbSend: 0.35, delaySend: 0 },
           params: { freq: 82, count: 5, detune: 26, wave: 'sawtooth', width: 1 }
         }),
         // Q を上げたノイズは、もう質感ではなく音程として鳴る
         v('noise', 0.5, 0.5, {
-          vol: 0.4, orbit: true, orbitPeriod: 190, orbitRadius: 0.6,
+          vol: 0.55, orbit: true, orbitPeriod: 190, orbitRadius: 0.6,
           orbitEcc: 0.15, orbitAngle: 270, orbitIncl: 40,
           common: { attack: 12, release: 8, drift: 0.9, reverbSend: 0.9, delaySend: 0.2 },
           params: { center: 165, q: 46, swellDepth: 0.4, swellRate: 0.5, width: 0.8 }

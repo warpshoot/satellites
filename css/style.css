@@ -224,6 +224,14 @@ body {
   position: absolute;
   transform: translate(-50%, -50%);
   display: flex;
+  /* 種別が増えても盤面からはみ出さない。切れるくらいなら折り返す。
+     幅は max-width ではなく width で固定する。絶対配置の箱を成り行きの幅に
+     すると、left を動かすたびに「残りの幅」で折り返し直されて、測った寸法と
+     実際に出る寸法が食い違う。右端に出したとき 220x76 のつもりが 116x178 に
+     化けて、盤面の上へはみ出していた。 */
+  flex-wrap: wrap;
+  justify-content: center;
+  width: min(calc(100% - 24px), 220px);
   gap: 6px;
   padding: 6px;
   background: rgba(14, 16, 21, 0.94);
