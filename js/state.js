@@ -11,7 +11,7 @@ const VERSION = 3;
 export const ORBIT_PARAMS = [
   { key: 'orbitPeriod', label: '周期', min: 5, max: 600, scale: 'log', unit: 's' },
   { key: 'orbitRadius', label: '軌道の大きさ', min: 0.02, max: 2, scale: 'log' },
-  { key: 'orbitEcc', label: 'つぶれ具合（0 = 正円）', min: 0, max: 0.9, scale: 'lin' },
+  { key: 'orbitEcc', label: 'つぶれ具合（0 = 正円）', min: 0, max: 0.9, scale: 'pow' },
   { key: 'orbitAngle', label: '軌道の向き', min: 0, max: 360, scale: 'lin', unit: '°' },
   { key: 'orbitIncl', label: '軌道の傾斜（倒すと立体になる）', min: 0, max: 90, scale: 'lin', unit: '°' },
   { key: 'orbitDir', label: '回り方', type: 'select', options: ['prograde', 'retrograde'], labels: { prograde: '順行', retrograde: '逆行' } }
@@ -32,10 +32,10 @@ export const MASTER_PARAMS = [
   { path: 'gain', label: 'マスター音量', min: 0, max: 1, scale: 'lin' },
   { path: 'tuning.root', label: '基音', type: 'select', options: ROOTS },
   { path: 'tuning.scale', label: '音階', type: 'select', options: SCALE_IDS, labels: SCALE_LABELS },
-  { path: 'reverb.length', label: 'リバーブ長さ', min: 0.5, max: 8, scale: 'lin', unit: 's', deferred: true },
+  { path: 'reverb.length', label: 'リバーブ長さ', min: 0.5, max: 15, scale: 'log', unit: 's', deferred: true },
   { path: 'reverb.decay', label: 'リバーブ減衰', min: 1, max: 6, scale: 'lin', deferred: true },
   { path: 'delay.time', label: 'ディレイ時間', min: 50, max: 2000, scale: 'log', unit: 'ms' },
-  { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'lin' },
+  { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'pow' },
   { path: 'delay.sync', label: 'ディレイを周回に合わせる', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } },
   { path: 'pulse', label: '音に合わせて星を動かす', type: 'select', options: [true, false], labels: { true: 'ON', false: 'OFF' } },
   { path: 'sky', label: '背景の星', type: 'select', options: SKY_STYLES, labels: SKY_LABELS, visual: true },

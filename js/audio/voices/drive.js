@@ -26,10 +26,10 @@ export class DriveVoice extends Voice {
   static defaults = { freq: 55, drive: 0.5, filterPos: 'post', swellRate: 0.08, swellDepth: 30 };
   static params = [
     { key: 'freq', label: '基音', min: 20, max: 300, scale: 'log', unit: 'Hz' },
-    { key: 'drive', label: '歪み量', min: 0, max: 1, scale: 'lin' },
+    { key: 'drive', label: '歪み量', min: 0, max: 1, scale: 'pow' },
     { key: 'filterPos', label: 'フィルタ位置', type: 'select', options: ['pre', 'post'] },
     { key: 'swellRate', label: 'うねり速度', min: 0.02, max: 1, scale: 'log', unit: 'Hz' },
-    { key: 'swellDepth', label: 'うねり深さ', min: 0, max: 100, scale: 'lin', unit: 'cent' }
+    { key: 'swellDepth', label: 'うねり深さ', min: 0, max: 100, scale: 'pow', unit: 'cent' }
   ];
 
   build() {

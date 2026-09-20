@@ -5,6 +5,7 @@ import { state, loadPatch, save, newVoiceData, findVoice, MAX_VOICES,
 import { patchLink, patchText, parseIncoming, copyText,
   savePatchFile, readPatchFile } from './patchio.js';
 import { createField } from './ui/field.js';
+import { createPerform } from './ui/perform.js';
 import { createPanel } from './ui/panel.js';
 import { createStrip } from './ui/strip.js';
 
@@ -14,6 +15,7 @@ const starsEl = document.getElementById('stars');
 const gateEl = document.getElementById('gate');
 const noticeEl = document.getElementById('notice');
 const transportEl = document.getElementById('transport');
+const performEl = document.getElementById('perform');
 
 const live = new Map();   // id -> Voice
 const muted = new Set();  // 保存しない。次に開いて無音だと壊れたように見える。
@@ -30,6 +32,26 @@ const TAU = Math.PI * 2;
 let aspect = 1;
 export function setAspect(a) {
   if (a > 0) aspect = a;
+}
+
+// ---- 演奏レイヤー -----------------------------------------------------
+// パッチの値ではなく、位置と時間に掛かる倍率。触っている間だけ効いて
+// 離すと 1.0 に戻る。保存しない（ソロ・ミュートと同じ理由）。
+const perf = { time: 1, gravity: 1 };
+
+// 時間の倍率は currentTime に直接掛けられない。掛けると倍率を動かした
+// 瞬間に位相が飛ぶ。進んだぶんだけ倍率を掛けて積む、別の時計を持つ。
+let clockTime = 0;
+let clockRef = null;
+
+function clock() {
+  const raw = engine.ctx ? engine.ctx.currentTime : 0;
+  if (clockRef == null) { clockRef = raw; return clockTime; }
+  const dt = raw - clockRef;
+  clockRef = raw;
+  // 中断から戻ったときに currentTime が飛ぶことがある。跨いだぶんは捨てる。
+  if (dt > 0 && dt < 60) clockTime += dt * perf.time;
+  return clockTime;
 }
 
 // 面から浮く量。盤面の横幅 1 に対してどれだけ動かすか。
@@ -101,14 +123,23 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 // 核は盤面のど真ん中に固定。動かないので、周回は常にここを回る。
 export const CENTER = { x: 0.5, y: 0.5 };
 
+// 引力は「核からの隔たり」に丸ごと掛かる。周回していてもいなくても同じ。
 function resolve(v, t) {
+  const g = perf.gravity;
   if (v.orbit) {
     // 半径はノブではなく「核からどれだけ離して置いたか」で決まる。
     // 盤面の外へ出る軌道もあるので、ここでは丸めない。丸めると距離が頭打ちになる。
     const o = orbitState(v, t);
-    return { x: CENTER.x + o.x, y: CENTER.y + o.y, zOff: o.z };
+    return { x: CENTER.x + o.x * g, y: CENTER.y + o.y * g, zOff: o.z * g };
   }
-  return { x: v.x, y: v.y, zOff: 0 };
+  return { x: CENTER.x + (v.x - CENTER.x) * g, y: CENTER.y + (v.y - CENTER.y) * g, zOff: 0 };
+}
+
+// 画面に見えている点を、引力が掛かる前の座標へ戻す。
+// 掴んで動かすときは、見えている場所ではなく元の場所を書き換える。
+function unwarpPoint(x, y) {
+  const g = perf.gravity || 1;
+  return { x: CENTER.x + (x - CENTER.x) / g, y: CENTER.y + (y - CENTER.y) / g };
 }
 
 // 核からの3次元距離。盤面は正方形でないので縦は縦横比で割って揃える。
@@ -160,7 +191,18 @@ const app = {
   canAdd: () => state.patch.voices.length < MAX_VOICES,
 
   resolved(v) {
-    return resolve(v, engine.ctx ? engine.ctx.currentTime : 0);
+    return resolve(v, clock());
+  },
+
+  // ---- 演奏レイヤー ---------------------------------------------------
+  perf: (key) => perf[key],
+
+  setPerf(key, value) {
+    if (!(key in perf) || !isFinite(value)) return;
+    perf[key] = value;
+    // 時間は時計の進み方が変わるだけなので、位置を今すぐ引き直す必要はない。
+    // 引力は見えている位置そのものが動く。
+    if (key === 'gravity') perfApply();
   },
 
   effectivePos(v) {
@@ -221,11 +263,12 @@ const app = {
     if (!v.orbit) return null;
     const g = orbitGeom(v);
     if (g.rho < 0.004) return null;
+    const gr = perf.gravity;
     const pts = [];
     const steps = n || 96;
     for (let i = 0; i <= steps; i++) {
       const p = ellipsePoint(g.rho, v.orbitEcc || 0, v.orbitAngle || 0, v.orbitIncl || 0, (TAU * i) / steps);
-      pts.push({ x: CENTER.x + p.x, y: CENTER.y + p.y, dz: p.z });
+      pts.push({ x: CENTER.x + p.x * gr, y: CENTER.y + p.y * gr, dz: p.z * gr });
     }
     return pts;
   },
@@ -328,16 +371,18 @@ const app = {
   moveTo(id, x, y) {
     const v = findVoice(id);
     if (!v) return;
+    // 指が指しているのは引力の掛かった先。戻してから書き込む。
+    const u = unwarpPoint(x, y);
     if (v.orbit) {
-      const g = orbitFromPoint(v, x, y, engine.ctx ? engine.ctx.currentTime : 0);
+      const g = orbitFromPoint(v, u.x, u.y, clock());
       v.orbitRadius = g.rho;
       v.orbitPhase = g.phase;
       applyPos(v);
       field.layout();
       return;
     }
-    v.x = clamp01(x);
-    v.y = clamp01(y);
+    v.x = clamp01(u.x);
+    v.y = clamp01(u.y);
     applyPos(v);
     field.layout();
   },
@@ -374,7 +419,7 @@ const app = {
   toggleOrbit(id) {
     const v = findVoice(id);
     if (!v) return;
-    const t = engine.ctx ? engine.ctx.currentTime : 0;
+    const t = clock();
     if (!v.orbit) {
       // 入れた瞬間に飛ばないよう、いまの場所から半径と位相を割り出す
       const g = orbitFromPoint(v, v.x, v.y, t);
@@ -382,10 +427,11 @@ const app = {
       v.orbitPhase = g.phase;
       v.orbit = true;
     } else {
-      // 外すときは、いま見えている場所に置いていく
+      // 外すときは、いま見えている場所に置いていく（引力は戻してから）
       const pos = this.resolved(v);
-      v.x = clamp01(pos.x);
-      v.y = clamp01(pos.y);
+      const u = unwarpPoint(pos.x, pos.y);
+      v.x = clamp01(u.x);
+      v.y = clamp01(u.y);
       v.orbit = false;
     }
     applyPos(v);
@@ -505,6 +551,19 @@ function redraw() {
   strip.render();
 }
 
+// 演奏レイヤーで位置が動いたときの引き直し。見た目は毎フレーム、
+// 音は間引く。8点 × パラメータ数の setTargetAtTime を 60Hz で撒かない。
+let perfAudioAt = 0;
+
+function perfApply() {
+  const now = performance.now();
+  if (now - perfAudioAt > 25) {
+    perfAudioAt = now;
+    for (const v of state.patch.voices) applyPos(v);
+  }
+  field.layout();
+}
+
 function applyAudible() {
   for (const v of state.patch.voices) {
     const voice = live.get(v.id);
@@ -552,6 +611,7 @@ function spawn(data) {
 }
 
 const field = createField(fieldEl, app);
+const perform = createPerform(performEl, app);
 const panel = createPanel(panelEl, app);
 const strip = createStrip(starsEl, app);
 
@@ -583,6 +643,7 @@ window.addEventListener('hashchange', loadFromHash);
 
 // 周回の計算は 10Hz で十分。毎フレームは回さない。
 setInterval(() => {
+  clock(); // 止まっている間も時計は進めておく。再開で位相が飛ばないように。
   const orbiting = state.patch.voices.some((v) => v.orbit);
   const camMoving = field.stepCamera();
   if (!orbiting && !camMoving) return;

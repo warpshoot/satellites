@@ -11,17 +11,31 @@ const TYPE_PARAM = {
 };
 import { renderMaster } from './master.js';
 
+// 0 から始まるノブは log を通せない（log 0 が無い）。かといって lin だと、
+// スライダの左半分がほぼ死ぬ。デチューン 2cent と 5cent はうなりの速さが
+// 倍以上違うのに、0〜50 の lin では 1.5mm しか離れていない。
+// べき乗カーブは 0 を出せて、下を細かく、上をざっくり刻む。
+const GAMMA = 2;
+
+function gammaOf(p) {
+  return p.gamma || GAMMA;
+}
+
 export function toNorm(p, value) {
   if (p.scale === 'log') {
     return (Math.log(value) - Math.log(p.min)) / (Math.log(p.max) - Math.log(p.min));
   }
-  return (value - p.min) / (p.max - p.min);
+  const n = (value - p.min) / (p.max - p.min);
+  if (p.scale === 'pow') return Math.pow(Math.max(0, n), 1 / gammaOf(p));
+  return n;
 }
 
 export function fromNorm(p, n) {
   let v;
   if (p.scale === 'log') {
     v = Math.exp(Math.log(p.min) + n * (Math.log(p.max) - Math.log(p.min)));
+  } else if (p.scale === 'pow') {
+    v = p.min + Math.pow(n, gammaOf(p)) * (p.max - p.min);
   } else {
     v = p.min + n * (p.max - p.min);
   }

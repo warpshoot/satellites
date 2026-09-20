@@ -13,9 +13,10 @@ export class DroneVoice extends Voice {
   static color = '#6f9dff';
   static defaults = { freq: 80, count: 3, detune: 12, wave: 'sawtooth', width: 0.6 };
   static params = [
-    { key: 'freq', label: '基音', min: 20, max: 500, scale: 'log', unit: 'Hz' },
+    { key: 'freq', label: '基音', min: 20, max: 2000, scale: 'log', unit: 'Hz' },
     { key: 'count', label: 'オシレータ数', min: 1, max: 5, scale: 'int' },
-    { key: 'detune', label: 'デチューン', min: 0, max: 50, scale: 'lin', unit: 'cent' },
+    // 100cent = 半音。振り切ると崩れる手前まで行ける。下は 1cent 刻みで効く。
+    { key: 'detune', label: 'デチューン', min: 0, max: 100, scale: 'pow', unit: 'cent' },
     { key: 'width', label: '広がり', min: 0, max: 1, scale: 'lin' },
     { key: 'wave', label: '波形', type: 'select', options: ['sawtooth', 'triangle', 'sine', 'square'] }
   ];

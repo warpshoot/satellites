@@ -3,9 +3,9 @@
 export const COMMON_PARAMS = [
   { key: 'attack', label: 'アタック', min: 0.01, max: 20, scale: 'log', unit: 's' },
   { key: 'release', label: 'リリース', min: 0.01, max: 30, scale: 'log', unit: 's' },
-  { key: 'drift', label: 'ゆらぎ', min: 0, max: 1, scale: 'lin' },
-  { key: 'reverbSend', label: 'リバーブ', min: 0, max: 1, scale: 'lin' },
-  { key: 'delaySend', label: 'ディレイ', min: 0, max: 1, scale: 'lin' }
+  { key: 'drift', label: 'ゆらぎ', min: 0, max: 1, scale: 'pow' },
+  { key: 'reverbSend', label: 'リバーブ', min: 0, max: 1, scale: 'pow' },
+  { key: 'delaySend', label: 'ディレイ', min: 0, max: 1, scale: 'pow' }
 ];
 
 export const COMMON_DEFAULTS = {

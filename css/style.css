@@ -27,10 +27,18 @@ body {
   height: 100%;
 }
 
+/* 盤面と演奏の帯はひとつの塊。縦でも横でも、この2つは必ず縦に積む。 */
+#stage {
+  flex: 0 0 62%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* ---- 盤面 ---- */
 #field {
   position: relative;
-  flex: 0 0 58%;
+  flex: 1 1 auto;
   overflow: hidden;
   touch-action: none;
   background:
@@ -576,10 +584,9 @@ input[type=range]::-moz-range-thumb {
     grid-template-columns: 1fr 340px;
     grid-template-rows: auto minmax(0, 1fr);
   }
-  #field {
+  #stage {
     grid-column: 1;
     grid-row: 1 / span 2;
-    border-bottom: 0;
     border-right: 1px solid var(--line);
   }
   #stars { grid-column: 2; grid-row: 1; }
@@ -611,3 +618,95 @@ input[type=range]::-moz-range-thumb {
 .patch-box.hidden { display: none; }
 
 .patch-file { display: none; }
+
+
+/* ---- 演奏の帯 ----
+   触っている間だけ効く倍率。パッチの値には触らないので、
+   ここを何度振っても配置は壊れない。保存もしない。 */
+#perform {
+  flex: 0 0 auto;
+  padding: 7px 12px 10px;
+  border-top: 1px solid var(--line);
+  background: rgba(10, 12, 18, 0.72);
+}
+
+.perf-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.perf-title {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--dim);
+}
+
+.perf-head .chip { margin-left: auto; padding: 3px 10px; font-size: 10px; }
+
+.rib + .rib { margin-top: 7px; }
+
+.rib-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--dim);
+  margin-bottom: 3px;
+}
+
+.rib-val { font-variant-numeric: tabular-nums; }
+
+/* 掴む高さは見た目より広く取る。指で狙う帯なので細いと外れる。 */
+.rib-track {
+  position: relative;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  touch-action: none;
+  cursor: ew-resize;
+  overflow: hidden;
+}
+
+.rib-track.held { background: rgba(255, 255, 255, 0.09); }
+
+/* 等倍の目印。戻ってくる場所が見えていないと、どこがゼロか分からない。 */
+.rib-mid {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.rib-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(150, 178, 255, 0.18);
+}
+
+.rib-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #cfdcff;
+  box-shadow: 0 0 10px rgba(160, 190, 255, 0.5);
+}
+
+.rib-end {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.rib-end.lo { left: 8px; }
+.rib-end.hi { right: 8px; }
+.rib-track.off .rib-val { color: #cfdcff; }
