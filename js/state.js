@@ -205,6 +205,10 @@ function clamp01(v) {
 export const state = {
   patch: emptyPatch(),
   selectedId: null,
+  // 非・音色側のタブ。音色タブは選択から引けるので状態を持たないが、
+  // マスターとパッチは引ける手がかりが無いので、ここで1つだけ覚える。
+  // 見ている場所の話なので保存はしない。
+  tab: 'master',
   // 保存が1つも無い、本当の最初の1回。呼ぶ側が種を蒔くのに使う。
   // 「空にする」で空になった状態は保存された空なので、ここには含めない。
   fresh: false
@@ -243,11 +247,14 @@ export function setPatch(raw) {
   return state.patch;
 }
 
-// リンクで上書きする前に、いま保存されているものを退避する
+// 上書きする前に、いまの配置を退避する。
+// **保存されているものではなく、いま鳴っているものを写す。** 保存は debounce 500ms
+// なので、ノブを触った直後にプリセットを押すと、保存はまだ前の値のまま。
+// そこから写すと「元に戻す」が触る前へ巻き戻る。初回はそもそも保存が無いので、
+// 保存から写す作りだと、置いたばかりの星を消しても戻る先が生まれなかった。
 export function backupCurrent() {
   try {
-    const cur = localStorage.getItem(KEY);
-    if (cur) localStorage.setItem(BACKUP_KEY, cur);
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(state.patch));
   } catch (e) { /* 使えなければ諦める */ }
 }
 

@@ -366,6 +366,16 @@ const app = {
     else redraw();
   },
 
+  // 非・音色側のどちらを見ているか。音色タブは選択から引くので、ここには来ない。
+  tab: () => state.tab,
+
+  showTab(t) {
+    state.tab = t;
+    // 星を選んだままだと音色パネルが出たままになる。降ろし方は select に任せる
+    // （ソロの付け替えまで面倒を見るので、ここに書き写さない）。
+    this.select(null);
+  },
+
   // タブから音色パネルに戻るとき、直前に見ていた点を開く
   focusVoice() {
     const v = findVoice(lastVoiceId) || state.patch.voices[0];

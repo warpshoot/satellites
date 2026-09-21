@@ -16,6 +16,7 @@ const VOL_PARAM = { key: 'vol', label: '音量', min: 0, max: 1, scale: 'lin', d
 const ORBIT_SWITCH = { key: 'orbit', label: '周回', type: 'select', options: ['OFF', 'ON'] };
 
 import { renderMaster } from './master.js';
+import { renderPatch } from './patch.js';
 
 // 0 から始まるノブは log を通せない（log 0 が無い）。かといって lin だと、
 // スライダの左半分がほぼ死ぬ。デチューン 2cent と 5cent はうなりの速さが
@@ -187,21 +188,23 @@ function section(title) {
   return s;
 }
 
-// 音色とマスターの切り替えは常設のタブが持つ。点への操作とは並べない。
+// 画面の切り替えは常設のタブが持つ。点への操作とは並べない。
+// 3枚はスコープの順。1点の音 → 全体の音 → 丸ごと入れ替える。
+// 音色だけは状態を持たない（星を選んでいるかどうかで決まる）。
 function buildTabs(app, onVoice) {
   const tabs = document.createElement('div');
   tabs.className = 'tabs';
-  const voiceTab = document.createElement('button');
-  voiceTab.className = 'tab' + (onVoice ? ' on' : '');
-  voiceTab.textContent = '音色';
-  voiceTab.disabled = !onVoice && !app.hasVoices();
-  voiceTab.addEventListener('click', () => app.focusVoice());
-  const masterTab = document.createElement('button');
-  masterTab.className = 'tab' + (onVoice ? '' : ' on');
-  masterTab.textContent = 'マスター';
-  masterTab.addEventListener('click', () => app.select(null));
-  tabs.appendChild(voiceTab);
-  tabs.appendChild(masterTab);
+  const tab = (label, on, disabled, onClick) => {
+    const b = document.createElement('button');
+    b.className = 'tab' + (on ? ' on' : '');
+    b.textContent = label;
+    b.disabled = !!disabled;
+    b.addEventListener('click', onClick);
+    tabs.appendChild(b);
+  };
+  tab('音色', onVoice, !onVoice && !app.hasVoices(), () => app.focusVoice());
+  tab('マスター', !onVoice && app.tab() === 'master', false, () => app.showTab('master'));
+  tab('パッチ', !onVoice && app.tab() === 'patch', false, () => app.showTab('patch'));
   return tabs;
 }
 
@@ -211,7 +214,9 @@ export function createPanel(el, app) {
     const v = app.selected();
     el.appendChild(buildTabs(app, !!v));
     if (!v) {
-      renderMaster(el, app, { section, buildControl });
+      const ui = { section, buildControl };
+      if (app.tab() === 'patch') renderPatch(el, app, ui);
+      else renderMaster(el, app, ui);
       return;
     }
     const V = app.typeOf(v);
