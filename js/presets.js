@@ -218,7 +218,7 @@ export const PRESETS = [
     patch: {
       version: 3,
       master: {
-        gain: 0.95,
+        gain: 1,
         // 単音。全部が同じ音度へ吸い付くので、音程の話が消えて律だけが残る。
         tuning: { root: 'G', scale: 'unison', drift: 0 },
         // 小さい部屋。尾が短いほうが、点が点として聞こえる。
@@ -230,7 +230,7 @@ export const PRESETS = [
       voices: [
         // 周期 9 秒を 8 分割。1.125 秒ごとに、誤差なしで戻ってくる。
         v('pluck', 0.5, 0.5, {
-          vol: 0.62, orbit: true, orbitPeriod: 9, orbitRadius: 0.26,
+          vol: 0.84, orbit: true, orbitPeriod: 9, orbitRadius: 0.26,
           orbitEcc: 0, orbitAngle: 0, orbitIncl: 15,
           common: { attack: 0.15, release: 1.5, drift: 0.15, tone: 0.1, reverbSend: 0.35, delaySend: 0.25 },
           params: { interval: 3, jitter: 0, center: 392, spread: 0, decay: 0.7,
@@ -238,7 +238,7 @@ export const PRESETS = [
         }),
         // 周期 21 秒を 3 分割。7 秒ごと。1.125 秒の列と噛み合うのは 63 秒ごと。
         v('bell', 0.5, 0.5, {
-          vol: 0.39, orbit: true, orbitPeriod: 21, orbitRadius: 0.42,
+          vol: 0.53, orbit: true, orbitPeriod: 21, orbitRadius: 0.42,
           orbitEcc: 0, orbitAngle: 90, orbitIncl: 45,
           common: { attack: 0.6, release: 2, drift: 0.2, tone: 0.3, reverbSend: 0.5, delaySend: 0.3 },
           params: { interval: 6, jitter: 0, center: 1568, spread: 0, ratio: '2',
@@ -246,7 +246,7 @@ export const PRESETS = [
         }),
         // ユニゾン1本・デチューン 0・幅 0。厚みのない、細いモノの土台。
         v('drone', 0.5, 0.7, {
-          vol: 0.35,
+          vol: 0.48,
           common: { attack: 4, release: 3, drift: 0.1, tone: -0.55, reverbSend: 0.2, delaySend: 0 },
           params: { freq: 98, count: 1, detune: 0, wave: 'square', width: 0 }
         })
