@@ -556,13 +556,17 @@ input[type=range]::-moz-range-thumb {
 #notice.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* ---- 起動オーバーレイ ---- */
+/* ゲートは全部の手前。停止ボタン（215）もピッカー（200）も確認バブル（220）も
+   覆う。下に敷くと、ゲートが出ているあいだに停止ボタンが押せてしまい、
+   それは「意図的な停止」なので自動復帰の対象外になる。ゲートを叩いても
+   鳴らない行き止まりができる。 */
 #gate {
   position: fixed;
   inset: 0;
   display: grid;
   place-items: center;
   background: #08090c;
-  z-index: 50;
+  z-index: 300;
   transition: opacity 0.45s;
   cursor: pointer;
 }

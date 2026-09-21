@@ -27,6 +27,7 @@ let started = false;
 let noticeTimer = null;
 let lastVoiceId = null;
 let paused = false;   // 意図的な停止。自動復帰の対象外にする。
+let everRan = false;  // 一度でも鳴ったか。鳴る前に「止まっている」と出さないため。
 let pauseTimer = null;
 
 const TAU = Math.PI * 2;
@@ -844,9 +845,14 @@ function running() {
   return !!engine.ctx && engine.ctx.state === 'running';
 }
 
+// 文言は「出さないと話が進まない」ときだけ入れる。
+// 起動のゲートは自分で閉じるので、最初は枠ごと空のままにしておく。
+// 自動では鳴らせなかったと分かってから初めて誘う。
 function showGate(mode) {
-  if (mode === 'resume') {
-    gateTitle.textContent = 'SATELLITES';
+  if (mode === 'start') {
+    gateText.textContent = '';
+    gateCta.textContent = 'タップして開始';
+  } else if (mode === 'resume') {
     gateText.textContent = '音が止まっている';
     gateCta.textContent = 'タップして再開';
   }
@@ -868,7 +874,7 @@ async function ensureRunning() {
     engine.resetSchedulers(); // 過去時刻に予約して暴発させない
     hideGate();
   } else {
-    showGate('resume');
+    showGate(everRan ? 'resume' : 'start');
   }
 }
 
@@ -891,16 +897,39 @@ async function begin() {
   engine.init();
   engine.ctx.addEventListener('statechange', () => {
     if (!started || paused) return;
-    if (running()) hideGate();
-    else showGate('resume');
+    if (running()) {
+      everRan = true;
+      hideGate();
+    } else {
+      // まだ一度も鳴っていないなら「止まっている」は嘘になる
+      showGate(everRan ? 'resume' : 'start');
+    }
   });
-  await engine.resume();
+  try {
+    await engine.resume();
+  } catch (e) {
+    /* ジェスチャの外からは弾かれる。下でゲートを出して待つ。 */
+  }
   app.applyMaster(true);
   stagger(1);
-  hideGate();
   setTransport();
   redraw();
+  if (running()) {
+    everRan = true;
+    hideGate();
+  } else {
+    // 自動では鳴らせなかった端末だけ、ここで初めて誘う。
+    // 先に文言を出しておくと、鳴る端末でも一瞬だけ指示が光って消える。
+    showGate('start');
+  }
 }
+
+// ゲートはタップ待ちにしない。タイトルを一瞬見せて、自分で開けにいく。
+// iOS のように resume() がジェスチャの外で弾かれる端末では、
+// begin() の中で「タップして開始」が出る。押す必要があると分かってから出す。
+setTimeout(() => {
+  if (!started) begin();
+}, 1000);
 
 // ---- 停止／再生 -------------------------------------------------------
 // suspend をそのまま割り当てるとブツッと切れる。フェードを挟む。
