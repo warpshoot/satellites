@@ -130,7 +130,7 @@ export const PRESETS = [
     patch: {
       version: 3,
       master: {
-        gain: 0.88,
+        gain: 1,
         tuning: { root: 'D', scale: 'lydian', drift: 0 },
         reverb: { length: 11, decay: 1.8 },
         delay: { time: 480, feedback: 0.42, sync: false, tone: 0.85, wow: 0.2 },
@@ -140,27 +140,27 @@ export const PRESETS = [
       voices: [
         // 土台も高いところに置く。ここを 50Hz 台にすると配置の性格が消える。
         v('drone', 0.5, 0.34, {
-          vol: 0.73,
+          vol: 0.6,
           common: { attack: 12, release: 8, drift: 0.35, tone: 0.2, reverbSend: 0.5, delaySend: 0.05 },
           params: { freq: 392, count: 2, detune: 6, wave: 'sine', width: 0.75 }
         }),
         // ピッチ幅を絞った鐘。跳ばないので旋律ではなく点として並ぶ。
         v('bell', 0.5, 0.5, {
-          vol: 0.67, orbit: true, orbitPeriod: 64, orbitRadius: 0.3,
+          vol: 0.55, orbit: true, orbitPeriod: 64, orbitRadius: 0.3,
           orbitEcc: 0.35, orbitAngle: 20, orbitIncl: 40,
           common: { attack: 2, release: 5, drift: 0.4, tone: 0.45, reverbSend: 0.75, delaySend: 0.4 },
           params: { interval: 4.5, jitter: 45, center: 1850, spread: 300, ratio: '1.41',
             index: 1.6, decay: 2.5, width: 0.65, trigger: 'free', hits: 2 }
         }),
         v('grain', 0.5, 0.5, {
-          vol: 0.55, orbit: true, orbitPeriod: 110, orbitRadius: 0.5,
+          vol: 0.45, orbit: true, orbitPeriod: 110, orbitRadius: 0.5,
           orbitEcc: 0.25, orbitAngle: 250, orbitIncl: 25,
           common: { attack: 5, release: 4, drift: 0.5, tone: 0.55, reverbSend: 0.85, delaySend: 0.3 },
           params: { interval: 1.1, jitter: 55, grainLen: 120, shape: 0.72, center: 3200, spread: 1100, wave: 'triangle', width: 1 }
         }),
         // 速いトレモロ。ゆっくり息をするのとは別の揺れ方になる。
         v('noise', 0.5, 0.5, {
-          vol: 0.37, orbit: true, orbitPeriod: 34, orbitRadius: 0.62,
+          vol: 0.3, orbit: true, orbitPeriod: 34, orbitRadius: 0.62,
           orbitEcc: 0.5, orbitAngle: 120, orbitIncl: 75,
           common: { attack: 8, release: 6, drift: 0.7, tone: 0.35, reverbSend: 0.9, delaySend: 0.1 },
           params: { center: 9500, q: 0.7, swellDepth: 0.3, swellRate: 0.9, width: 1 }
