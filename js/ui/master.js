@@ -17,7 +17,11 @@ export function renderMaster(el, app, ui) {
   // 機能ごとに切る。音の設定と見た目の設定を同じ列に並べない。
   MASTER_GROUPS.forEach((g) => {
     const sec = ui.section(g.title);
-    if (g.title === 'キー') sec.appendChild(keyReadout(app));
+    if (g.title === 'キー') sec.appendChild(readout(() => 'いま ' + app.soundingKey()));
+    // 同期しているとタイムのノブは寝るので、実際の間隔をここに出す。
+    if (g.title === 'ディレイ') sec.appendChild(readout(() => 'いま ' + app.soundingDelay() + 'ms'));
+    // 他の行を寝かせる選択行があるかどうか。あれば押したあとに並びを引き直す。
+    const gated = g.params.some((p) => p.when);
     g.params.forEach((p) => {
       const value = getPath(app.master(), p.path);
       sec.appendChild(
@@ -35,7 +39,9 @@ export function renderMaster(el, app, ui) {
             if (p.visual) app.refreshField();
             else app.applyMaster(p.deferred);
             app.commit();
-          }
+            if (gated && p.type === 'select') app.refreshPanel();
+          },
+          { disabled: p.when ? !p.when(app.master()) : false }
         )
       );
     });
@@ -46,12 +52,13 @@ export function renderMaster(el, app, ui) {
   el.appendChild(patchSection(app, ui));
 }
 
-// 転調があると、選んだルートと鳴っているルートがずれる。ずれたまま
-// どこにも出ないと、キーの欄が嘘をついていることになる。
-function keyReadout(app) {
+// ノブの値と鳴っているものがずれる欄には、鳴っているほうを1行出す。
+// 転調はルートをずらし、軌道への同期はディレイのタイムを乗っ取る。
+// ずれたまま出口が無いと、その欄が嘘をつく。
+function readout(text) {
   const row = document.createElement('div');
   row.className = 'readout';
-  const paint = () => { row.textContent = 'いま ' + app.soundingKey(); };
+  const paint = () => { row.textContent = text(); };
   paint();
   const t = setInterval(() => {
     if (!row.isConnected) return clearInterval(t);

@@ -68,7 +68,10 @@ export const MASTER_GROUPS = [
   {
     title: 'ディレイ',
     params: [
-      { path: 'delay.time', label: 'タイム', min: 50, max: 2000, scale: 'log', unit: 'ms', def: MASTER_DEFAULTS.delay.time },
+      // 軌道に同期している間は、ここの値は使われない（一番速い周回から割り出す）。
+      // 触れる顔のまま残すと、画面の数字と鳴っている間隔が食い違う。
+      { path: 'delay.time', label: 'タイム', min: 50, max: 2000, scale: 'log', unit: 'ms', def: MASTER_DEFAULTS.delay.time,
+        when: (m) => !m.delay.sync },
       { path: 'delay.feedback', label: 'フィードバック', min: 0, max: 0.85, scale: 'pow', def: MASTER_DEFAULTS.delay.feedback },
       { path: 'delay.tone', label: 'トーン', min: 0, max: 1, scale: 'lin', def: MASTER_DEFAULTS.delay.tone },
       { path: 'delay.wow', label: 'ドリフト', min: 0, max: 1, scale: 'pow', def: MASTER_DEFAULTS.delay.wow },

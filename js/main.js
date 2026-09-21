@@ -201,6 +201,8 @@ function soundingKey() {
 
 const app = {
   soundingKey,
+  // 同期していると、ディレイのタイムはノブではなく一番速い周回が決める。
+  soundingDelay: () => Math.round(delayMs(state.patch.master)),
   voices: () => state.patch.voices,
   master: () => state.patch.master,
   find: (id) => findVoice(id),
@@ -641,10 +643,24 @@ function swapVoices() {
   lastVoiceId = null;
   if (started) {
     app.applyMaster(true);
-    for (const data of state.patch.voices) spawn(data);
+    stagger(0.45); // 一斉に立ち上げると「全部同時に開いた」と聞こえる
   }
   redraw();
   field.layout();
+}
+
+// 配置を丸ごと入れ替えたときの立ち上げ。同じ瞬間に揃って開くと、
+// 勝手に集まってきたようには聞こえない。アタックが長い点ほど遅れても気づかれない。
+// 起動は待たされていないので広く、プリセットは押した直後なので狭く散らす。
+function stagger(scale) {
+  state.patch.voices.forEach((data, i) => {
+    const wait = i === 0 ? 0 : (900 * i + Math.random() * 4000) * scale;
+    setTimeout(() => {
+      if (!started || paused) return;
+      if (live.has(data.id) || !findVoice(data.id)) return;
+      spawn(data);
+    }, wait);
+  });
 }
 
 function applyPos(v) {
@@ -797,16 +813,7 @@ async function begin() {
   });
   await engine.resume();
   app.applyMaster(true);
-  // 一斉に立ち上げると全部が同じ瞬間に揃って開く。散らして、勝手に集まってきた
-  // ように聞かせる。アタックが長い点ほど遅れても気づかれない。
-  state.patch.voices.forEach((data, i) => {
-    const wait = i === 0 ? 0 : 900 * i + Math.random() * 4000;
-    setTimeout(() => {
-      if (!started || paused) return;
-      if (live.has(data.id) || !findVoice(data.id)) return;
-      spawn(data);
-    }, wait);
-  });
+  stagger(1);
   hideGate();
   setTransport();
   redraw();
