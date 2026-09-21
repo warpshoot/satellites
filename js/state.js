@@ -204,14 +204,19 @@ function clamp01(v) {
 
 export const state = {
   patch: emptyPatch(),
-  selectedId: null
+  selectedId: null,
+  // 保存が1つも無い、本当の最初の1回。呼ぶ側が種を蒔くのに使う。
+  // 「空にする」で空になった状態は保存された空なので、ここには含めない。
+  fresh: false
 };
 
 export function loadPatch() {
   try {
     const raw = localStorage.getItem(KEY) || localStorage.getItem(OLD_KEY);
+    state.fresh = !raw;
     state.patch = sanitize(raw ? JSON.parse(raw) : null);
   } catch (e) {
+    state.fresh = true;
     state.patch = emptyPatch();
   }
   return state.patch;

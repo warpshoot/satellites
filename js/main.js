@@ -1,5 +1,5 @@
 import { engine } from './audio/engine.js';
-import { createVoice, voiceClass } from './audio/voices/registry.js';
+import { createVoice, voiceClass, VOICE_TYPES } from './audio/voices/registry.js';
 import { state, loadPatch, save, newVoiceData, findVoice, MAX_VOICES,
   setPatch, backupCurrent, hasBackup, takeBackup, MASTER_PARAMS, setPath } from './state.js';
 import { patchLink, patchText, parseIncoming, copyText,
@@ -173,6 +173,52 @@ const DICE_MASTER = [
   'tuning.drift', 'reverb.length', 'reverb.decay',
   'delay.time', 'delay.feedback', 'delay.tone', 'delay.wow'
 ];
+
+// マスターのノブを振る。音のサイコロと配置ごとのサイコロで同じものを使う。
+function rollMaster() {
+  const m = state.patch.master;
+  m.tuning.root = ROOTS[Math.floor(Math.random() * ROOTS.length)];
+  m.tuning.scale = DICE_SCALES[Math.floor(Math.random() * DICE_SCALES.length)];
+  for (const p of MASTER_PARAMS) {
+    if (!DICE_MASTER.includes(p.path)) continue;
+    setPath(m, p.path, randomFor(p));
+  }
+  // 飽和だけは一様に振らない。上半分はどの配置でも同じ顔になる。
+  m.burn = Math.pow(Math.random(), 2) * 0.7;
+}
+
+// 種別は引き直すたびに山を切り直す。毎回 6 種から独立に引くと、
+// 5 点でも半分が同じ種別になることがよくあり、何が作れる道具なのか見えない。
+function typeDeck() {
+  const deck = VOICE_TYPES.slice();
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+// 星を1つ、でたらめな軌道に作る。置き場所ではなく軌道要素のほうを引く。
+// 半径は 0.5 までにしておく。それ以上は逆二乗でほとんど聞こえなくなる。
+function rollNewVoice(V) {
+  const data = newVoiceData(V.type, CENTER.x, CENTER.y);
+  data.orbitRadius = 0.06 + Math.random() * 0.44;
+  data.orbitPhase = Math.random() * TAU;
+  data.orbitPeriod = Math.round(15 * Math.pow(16, Math.random())); // 15〜240 秒を log で
+  data.orbitEcc = Math.pow(Math.random(), 2) * 0.9; // 0 から始まるノブは pow で振る
+  data.orbitAngle = Math.random() * 360;
+  data.orbitIncl = Math.random() * 90;
+  data.orbitDir = Math.random() < 0.25 ? 'retrograde' : 'prograde';
+  rollVoice(data);
+  // 何本かは止めておく。全部が回っていると、動きの速さの差が読めない。
+  if (Math.random() < 0.25) {
+    const p = orbitState(data, engine.now());
+    data.x = clamp01(CENTER.x + p.x);
+    data.y = clamp01(CENTER.y + p.y);
+    data.orbit = false;
+  }
+  return data;
+}
 
 // 1つの星の音だけを振る。アタックとリリースは振らない
 // （20 秒のアタックを引くと「押したのに何も起きない」になる）。
@@ -488,20 +534,40 @@ const app = {
   // 見た目（背景・追尾・パルス）と音量は、聴き方の設定なので動かさない。
   randomizeAll() {
     backupCurrent(); // 1回だけ戻れるようにしてから振る
-    const m = state.patch.master;
-    m.tuning.root = ROOTS[Math.floor(Math.random() * ROOTS.length)];
-    m.tuning.scale = DICE_SCALES[Math.floor(Math.random() * DICE_SCALES.length)];
-    for (const p of MASTER_PARAMS) {
-      if (!DICE_MASTER.includes(p.path)) continue;
-      setPath(m, p.path, randomFor(p));
-    }
-    // 飽和だけは一様に振らない。上半分はどの配置でも同じ顔になる。
-    m.burn = Math.pow(Math.random(), 2) * 0.7;
+    rollMaster();
     for (const v of state.patch.voices) rollVoice(v);
     this.applyMaster(true);
     redraw();
     save();
-    this.notice('全部ランダムにした');
+    this.notice('音をランダムにした');
+  },
+
+  // 何から作ればいいのか分からないときの出口。音のサイコロと違って、
+  // 星の数・種類・軌道まで引き直す。いま置いてあるものは残らない。
+  scatterAll() {
+    backupCurrent();
+    rollMaster();
+    const n = 3 + Math.floor(Math.random() * 5); // 3〜7。埋めきると分解して読めない
+    const deck = typeDeck();
+    const voices = [];
+    for (let i = 0; i < n; i++) voices.push(rollNewVoice(deck[i % deck.length]));
+    state.patch.voices = voices;
+    state.selectedId = null;
+    save();
+    swapVoices(); // 鳴っている音は release で消して、新しい配置を散らして立ち上げる
+    this.notice('配置ごとランダムにした');
+  },
+
+  // 盤面を空にする。マスターは聴き方の設定なので残す。
+  // 退避を取ってあるので、押し間違えても「元に戻す」で帰ってこられる。
+  clearAll() {
+    if (!state.patch.voices.length) return this.notice('もう空');
+    backupCurrent();
+    state.patch.voices = [];
+    state.selectedId = null;
+    save();
+    swapVoices();
+    this.notice('空にした');
   },
 
   // ---- 持ち出しと持ち込み -------------------------------------------
@@ -695,6 +761,13 @@ const panel = createPanel(panelEl, app);
 const strip = createStrip(starsEl, app);
 
 loadPatch();
+// 保存が1つも無い最初の1回だけ、プリセットを1つ引いて置いておく。
+// 空の盤面から始めさせると、何が起きる道具なのか分からないまま終わる。
+// ここでは保存しない。触った時点で保存されるので、何もせず閉じれば次は別の1つ。
+if (state.fresh && PRESETS.length) {
+  const pick = PRESETS[Math.floor(Math.random() * PRESETS.length)];
+  setPatch(JSON.parse(JSON.stringify(pick.patch)));
+}
 redraw();
 
 // リンクで開かれたときは、そちらに乗り換える。前の配置は退避しておく。

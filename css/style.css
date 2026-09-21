@@ -578,6 +578,10 @@ input[type=range]::-moz-range-thumb {
   padding-left: 0.42em;
 }
 
+/* 起動時はタイトルだけ。中断からの復帰でだけ JS が文言を入れる。
+   空のまま行を残すと、その余白ぶんタイトルが上へずれる。 */
+.gate-inner p:empty, .gate-cta:empty { display: none; }
+
 .gate-inner p {
   margin-top: 14px;
   font-size: 12px;

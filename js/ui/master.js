@@ -70,20 +70,27 @@ function readout(text) {
 // 音作りの当てがまったく無いときの出口。押す前に退避を取るので、
 // 気に入らなければ「元に戻す」で帰ってこられる。
 // 星ごとのチップと同じ「ランダム」で通す。同じ機能に2つ名前を付けない。
+//
+// 2枚あるのは、触る範囲が違うから。「音」はいま置いてある星の音だけを振り、
+// 「配置ごと」は星の数から引き直す。どちらが何を壊すかは添え書きで出す。
 function randomSection(app, ui) {
   const sec = ui.section('ランダム');
-  const row = document.createElement('div');
-  row.className = 'patch-row';
-  const b = document.createElement('button');
-  b.className = 'chip';
-  b.textContent = '全部ランダム';
-  b.addEventListener('click', () => app.randomizeAll());
-  row.appendChild(b);
-  const hint = document.createElement('span');
-  hint.className = 'note'; // 動かない添え書き。生きている readout とは別物。
-  hint.textContent = '置いた場所と周回は動かない';
-  row.appendChild(hint);
-  sec.appendChild(row);
+  const line = (label, hint, onClick) => {
+    const row = document.createElement('div');
+    row.className = 'patch-row';
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    row.appendChild(b);
+    const note = document.createElement('span');
+    note.className = 'note'; // 動かない添え書き。生きている readout とは別物。
+    note.textContent = hint;
+    row.appendChild(note);
+    return row;
+  };
+  sec.appendChild(line('音', '置いた場所と周回は動かない', () => app.randomizeAll()));
+  sec.appendChild(line('配置ごと', '星の数から引き直す', () => app.scatterAll()));
   return sec;
 }
 
@@ -174,6 +181,10 @@ function patchSection(app, ui) {
     kids.push(btn('元に戻す', 'danger', () => app.restoreBackup()));
   }
   sec.appendChild(row.apply(null, kids));
+
+  // 空にするのも持ち込みと同じで、いまの配置を丸ごと入れ替える操作。
+  // 退避を取ってから消すので、直後なら「元に戻す」が出る。
+  sec.appendChild(row(btn('空にする', 'danger', () => app.clearAll())));
 
   sec.appendChild(box);
   sec.appendChild(file);
