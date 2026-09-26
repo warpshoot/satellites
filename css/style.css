@@ -604,23 +604,68 @@ input[type=range]::-moz-range-thumb {
   border-radius: 999px;
 }
 
-/* 横長のときは盤面を左、帯とパネルを右に積む。
-   flex-direction: row にすると、横並び前提で作った星の帯が
-   盤面とパネルの間に「列」として挟まって、真ん中に浮く。 */
+/* 星の帯とパネルの束。縦長では盤面の下に積む。 */
+#side {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#side-toggle { display: none; }
+
+/* 横長のときは盤面を画面いっぱいに敷いて、帯とパネルは上に浮かせる。
+   横に並べると、盤面が「画面の左の枠」になって宇宙に見えない。
+   浮かせたぶん隠れる幅は field.js が測って、核を見えている部分の真ん中へ寄せる。 */
 @media (min-aspect-ratio: 1/1) {
-  #app {
-    display: grid;
-    grid-template-columns: 1fr 340px;
-    grid-template-rows: auto minmax(0, 1fr);
-  }
+  #app { position: relative; }
   #field {
-    grid-column: 1;
-    grid-row: 1 / span 2;
+    position: absolute;
+    inset: 0;
     border-bottom: 0;
-    border-right: 1px solid var(--line);
   }
-  #stars { grid-column: 2; grid-row: 1; }
-  #panel { grid-column: 2; grid-row: 2; min-height: 0; }
+  #side {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: 340px;
+    z-index: 150;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    background: rgba(14, 16, 21, 0.9);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    transition: transform 0.28s ease, visibility 0s linear 0s;
+  }
+  #side #stars,
+  #side #panel { background: transparent; }
+  #side.closed {
+    transform: translateX(calc(100% + 24px));
+    visibility: hidden;
+    transition: transform 0.28s ease, visibility 0s linear 0.28s;
+  }
+
+  /* 畳む・開くは見えるボタンだけが持つ。盤面に見えない操作は置かない。
+     開いているときはパネルの左肩、畳んだら画面の右上に居る。 */
+  #side-toggle {
+    display: block;
+    position: absolute;
+    top: 12px;
+    right: 364px;
+    z-index: 160;
+    background: rgba(14, 16, 21, 0.9);
+    border: 1px solid var(--line);
+    color: var(--dim);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 7px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: right 0.28s ease;
+  }
+  #side.closed + #side-toggle { right: 12px; color: var(--text); }
 }
 
 /* 値でもノブでもない、生きている読み取り。1秒ごとに書き替わる。行は1行に保つ。 */

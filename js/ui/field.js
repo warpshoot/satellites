@@ -1,26 +1,43 @@
 import { VOICE_TYPES } from '../audio/voices/registry.js';
 import { MAX_VOICES } from '../state.js';
 import { lookOf, skySvg, LOOK_IDS } from './looks.js';
+import { Y_SPAN, clampPos } from '../world.js';
 
 export const DOT_MIN = 2;
 export const DOT_MAX = 11;
 const HIT_MIN = 46;          // 星は小さいが、掴める大きさは別に確保する
 
 // 星の大きさは距離。遠いほど小さく、淡く、奥に描く。
-export function dotRadius(z) {
-  return DOT_MIN + z * (DOT_MAX - DOT_MIN);
+// k は画面の縮尺。2〜11px はスマホの盤面で決めた数字なので、広い画面では膨らませる。
+export function dotRadius(z, k = 1) {
+  return (DOT_MIN + z * (DOT_MAX - DOT_MIN)) * k;
 }
 
 // 真上から見た図。消失点を作らないので、中心は核だけを意味する。
 // cam は画面の中心に置く座標。選んだ星を追うときだけ動く。
 const cam = { x: 0.5, y: 0.5 };
 
-export function project(x, y, w, h) {
-  return { sx: (x - cam.x + 0.5) * w, sy: (1 - (y - cam.y + 0.5)) * h };
+// 縦も横も同じ縮尺で描く（world.js）。縮尺は「横 1、縦 Y_SPAN」が必ず収まる大きさで、
+// 余った面積は拡大には使わず、宇宙の続きとして見せる。
+// 横長の画面ではパネルが盤面に重なるので、中心は隠れていない部分の真ん中に取る。
+function viewOf(w, h, inset) {
+  const vw = Math.max(1, w - inset);
+  const s = Math.min(vw, h / Y_SPAN);
+  return { cx: vw / 2, cy: h / 2, s, vw, h };
 }
 
-export function unproject(sx, sy, w, h) {
-  return { x: sx / w + cam.x - 0.5, y: 1 - sy / h + cam.y - 0.5 };
+export function project(x, y, view) {
+  return { sx: view.cx + (x - cam.x) * view.s, sy: view.cy - (y - cam.y) * view.s };
+}
+
+export function unproject(sx, sy, view) {
+  return { x: (sx - view.cx) / view.s + cam.x, y: -(sy - view.cy) / view.s + cam.y };
+}
+
+// 星の縮尺。スマホの盤面（横 390px）で 1。大きくしすぎると記号が主張しはじめる。
+const BASE_S = 390;
+function dotScale(view) {
+  return Math.min(2.2, Math.max(1, view.s / BASE_S));
 }
 
 export function createField(el, app) {
@@ -32,14 +49,46 @@ export function createField(el, app) {
     return { x: p.x, y: p.y };
   }
 
+  // 横長の画面では、パネルが盤面の右に重なる。その幅だけ中心を左へ寄せる。
+  // 畳んだら 0 へ寄せていき、核がゆっくり画面の真ん中へ戻る。
+  const side = document.getElementById('side');
+  let inset = null;
+  function insetTarget(width) {
+    if (!side || side.classList.contains('closed')) return 0;
+    if (getComputedStyle(side).position !== 'absolute') return 0;
+    return Math.max(0, width - side.offsetLeft);
+  }
+
+  // いまの画面での投影。盤面の左上の画面座標も一緒に持つ。
+  function frame() {
+    const r = el.getBoundingClientRect();
+    if (inset == null) inset = insetTarget(r.width);
+    const f = viewOf(r.width, r.height, inset);
+    f.left = r.left;
+    f.top = r.top;
+    f.width = r.width;
+    return f;
+  }
+
+  function stepInset() {
+    const t = insetTarget(el.clientWidth);
+    if (inset == null || Math.abs(t - inset) < 0.5) {
+      inset = t;
+      return false;
+    }
+    inset += (t - inset) * 0.35;
+    return true;
+  }
+
   function stepCamera() {
+    const sliding = stepInset();
     const t = cameraTarget();
     const dx = t.x - cam.x;
     const dy = t.y - cam.y;
     if (Math.abs(dx) < 0.0004 && Math.abs(dy) < 0.0004) {
       cam.x = t.x;
       cam.y = t.y;
-      return false;
+      return sliding;
     }
     cam.x += dx * 0.25;
     cam.y += dy * 0.25;
@@ -97,14 +146,15 @@ export function createField(el, app) {
     if (!v) return;
     ask._id = id;
     ask.classList.remove('hidden');
-    const rect = el.getBoundingClientRect();
+    const f = frame();
     const p = app.effectivePos(v);
-    const pt = project(p.x, p.y, rect.width, rect.height);
+    const pt = project(p.x, p.y, f);
     const aw = ask.offsetWidth;
     const ah = ask.offsetHeight;
     const mx = aw / 2 + 6;
-    ask.style.left = Math.min(Math.max(pt.sx, mx), Math.max(mx, rect.width - mx)) + 'px';
-    ask.style.top = Math.min(Math.max(pt.sy - dotRadius(app.apparentOf(v)) - ah, 6), Math.max(6, rect.height - ah - 6)) + 'px';
+    // パネルが重なっている部分には出さない。見えている幅の中に収める。
+    ask.style.left = Math.min(Math.max(pt.sx, mx), Math.max(mx, f.vw - mx)) + 'px';
+    ask.style.top = Math.min(Math.max(pt.sy - dotRadius(app.apparentOf(v), dotScale(f)) - ah, 6), Math.max(6, f.h - ah - 6)) + 'px';
   }
 
   function hideAsk() {
@@ -150,14 +200,14 @@ export function createField(el, app) {
     // 実寸を測ってから寄せる。決め打ちの余白だと盤面の端で種別が切れる。
     // 幅は CSS 側で固定してある（成り行きにすると、寄せた先の残り幅で
     // 折り返し直されて、ここで測った寸法が当てにならなくなる）。
-    const r = el.getBoundingClientRect();
+    const r = frame();
     const pw = picker.offsetWidth;
     const ph = picker.offsetHeight;
     const mx = pw / 2 + 6;
     const my = ph / 2 + 6;
-    const pt = project(x, y, r.width, r.height);
-    const px = Math.min(Math.max(pt.sx, mx), Math.max(mx, r.width - mx));
-    let py = Math.min(Math.max(pt.sy - ph * 0.9, my), Math.max(my, r.height - my));
+    const pt = project(x, y, r);
+    const px = Math.min(Math.max(pt.sx, mx), Math.max(mx, r.vw - mx));
+    let py = Math.min(Math.max(pt.sy - ph * 0.9, my), Math.max(my, r.h - my));
 
     // 停止ボタンは盤面の左上に居座っていて、ピッカーより手前に描かれる。
     // 重なったままだと、左上の角をタップしたとき1つ目の種別が押せない。
@@ -169,7 +219,7 @@ export function createField(el, app) {
       const ty = tb.top - r.top;
       const hits = px - pw / 2 < tx + tb.width + 6 && px + pw / 2 > tx - 6
         && py - ph / 2 < ty + tb.height + 6 && py + ph / 2 > ty - 6;
-      if (hits) py = Math.min(ty + tb.height + 6 + ph / 2, Math.max(my, r.height - my));
+      if (hits) py = Math.min(ty + tb.height + 6 + ph / 2, Math.max(my, r.h - my));
     }
 
     picker.style.left = px + 'px';
@@ -224,8 +274,11 @@ export function createField(el, app) {
       if (!moved) return;
       const v = v0();
       if (!v || v.orbit) return; // 周回中の位置は軌道が決める
-      const rect = el.getBoundingClientRect();
-      const u = unproject(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height);
+      // 見えている範囲の外（パネルの下や画面の外）へは連れていかない
+      const f = frame();
+      const sx = Math.min(f.vw, Math.max(0, e.clientX - f.left));
+      const sy = Math.min(f.h, Math.max(0, e.clientY - f.top));
+      const u = unproject(sx, sy, f);
       app.moveTo(id, u.x, u.y);
     });
 
@@ -253,10 +306,11 @@ export function createField(el, app) {
       hidePicker();
       return;
     }
-    const rect = el.getBoundingClientRect();
-    const u = unproject(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height);
-    const x = Math.min(1, Math.max(0, u.x));
-    const y = Math.min(1, Math.max(0, u.y));
+    // 盤面のどこを触っても、そこに置ける。広い画面では横に続く宇宙にも置ける。
+    const f = frame();
+    const u = unproject(e.clientX - f.left, e.clientY - f.top, f);
+    const x = clampPos(u.x);
+    const y = clampPos(u.y);
     app.select(null);
     if (!app.canAdd()) {
       app.notice('星は' + MAX_VOICES + '個まで');
@@ -293,13 +347,14 @@ export function createField(el, app) {
   }
 
   function layout() {
-    const rect = el.getBoundingClientRect();
-    app.setAspect(rect.width / rect.height);
+    const f = frame();
+    const k = dotScale(f);
+    soloBar.style.left = f.cx + 'px';
     for (const v of app.voices()) {
       const d = dots.get(v.id);
       if (!d) continue;
       const pos = app.effectivePos(v);
-      const r = dotRadius(app.apparentOf(v));
+      const r = dotRadius(app.apparentOf(v), k);
       const hit = Math.max(HIT_MIN, r * 2 + 18);
       d.el.style.width = hit + 'px';
       d.el.style.height = hit + 'px';
@@ -308,25 +363,24 @@ export function createField(el, app) {
       d.body.style.width = r * 2 + 'px';
       d.body.style.height = r * 2 + 'px';
       d.body.style.opacity = (0.4 + 0.58 * app.nearOf(v)).toFixed(3);
-      const pt = project(pos.x, pos.y, rect.width, rect.height);
+      const pt = project(pos.x, pos.y, f);
       d.el.style.transform = 'translate(' + (pt.sx - hit / 2) + 'px,' + (pt.sy - hit / 2) + 'px)';
     }
-    layoutLinks();
+    layoutLinks(f, k);
   }
 
   // 周回の軌道。傾斜で面が倒れるため、点列を追って描く。
   // 奥側を薄く、手前側を濃くすることで立体に見せる。
-  function layoutLinks() {
-    const rect = el.getBoundingClientRect();
-    links.setAttribute('viewBox', '0 0 ' + rect.width + ' ' + rect.height);
+  function layoutLinks(f, k) {
+    links.setAttribute('viewBox', '0 0 ' + f.width + ' ' + f.h);
     // 核も投影を通す。素の画面中心に描くと、カメラを動かしたとき核まで付いてくる。
-    const core = project(0.5, 0.5, rect.width, rect.height);
+    const core = project(0.5, 0.5, f);
     const cx = core.sx;
     const cy = core.sy;
     // 中心もただの星。目立たせる飾りは置かない。
     const parts = ['<g class="hub">' +
-      '<circle class="halo1" r="5" cx="' + cx + '" cy="' + cy + '"/>' +
-      '<circle class="core" r="2" cx="' + cx + '" cy="' + cy + '"/></g>'];
+      '<circle class="halo1" r="' + 5 * k + '" cx="' + cx + '" cy="' + cy + '"/>' +
+      '<circle class="core" r="' + 2 * k + '" cx="' + cx + '" cy="' + cy + '"/></g>'];
     for (const v of app.voices()) {
       const pts = app.orbitPath(v);
       if (!pts) continue;
@@ -335,7 +389,7 @@ export function createField(el, app) {
       let near = '';
       let prevBehind = null;
       for (const pt of pts) {
-        const p = project(pt.x, pt.y, rect.width, rect.height);
+        const p = project(pt.x, pt.y, f);
         const behind = pt.dz < 0;
         const seg = (behind === prevBehind ? 'L' : 'M') + p.sx.toFixed(1) + ' ' + p.sy.toFixed(1);
         if (behind) far += seg; else near += seg;

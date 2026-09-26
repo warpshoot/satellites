@@ -1,5 +1,7 @@
 // Voice の共通インターフェース: start() / stop() / setParam() / dispose() / output
 
+import { Y_SPAN } from '../../world.js';
+
 // 共通パラメータは機能で束ねる。パネルはこの束ごとにセクションを立てるので、
 // 並び順を変えたければここを触る（画面側に順番を持たせない）。
 export const ENV_PARAMS = [
@@ -50,8 +52,10 @@ export function triangular() {
   return Math.random() + Math.random() - 1;
 }
 
+// 必ず見えている縦の幅（world.js）の上端で +1、下端で -1。
+// 広い画面でその外に置いた星は、端と同じ傾きで止まる。
 export function tiltFromY(y) {
-  return Math.min(1, Math.max(0, y)) * 2 - 1;
+  return Math.min(1, Math.max(-1, (y - 0.5) / (Y_SPAN / 2)));
 }
 
 // 縦位置の傾きに明るさのオフセットを足した合計。盤面の端に置いた星にも
