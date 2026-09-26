@@ -28,6 +28,7 @@
 // 測るのは masterGain の後ろ。リミッタから取るとマスター音量が効いていない
 // 値を読むので、トリムを当てても数字が動かない。
 
+// 座標は縦も横と同じ単位（world.js）。核は (0.5, 0.5)。
 function v(type, x, y, over) {
   return Object.assign({ type, x, y, orbit: false }, over || {});
 }
@@ -51,17 +52,17 @@ export const PRESETS = [
       },
       voices: [
         // 和音。下から C2 / G2 / C3 / E3 / G3。縦位置で明暗も分ける。
-        v('drone', 0.5, 0.74, {
+        v('drone', 0.5, 0.8, {
           vol: 0.72,
           common: { attack: 18, release: 12, drift: 0.25, tone: -0.5, reverbSend: 0.25, delaySend: 0 },
           params: { freq: 65, count: 2, detune: 4, wave: 'sine', width: 0.35 }
         }),
-        v('drone', 0.5, 0.66, {
+        v('drone', 0.5, 0.7, {
           vol: 0.59,
           common: { attack: 16, release: 10, drift: 0.3, tone: -0.3, reverbSend: 0.35, delaySend: 0 },
           params: { freq: 98, count: 2, detune: 7, wave: 'triangle', width: 0.6 }
         }),
-        v('drone', 0.5, 0.58, {
+        v('drone', 0.5, 0.6, {
           vol: 0.51,
           common: { attack: 20, release: 10, drift: 0.4, tone: -0.15, reverbSend: 0.45, delaySend: 0.05 },
           params: { freq: 131, count: 3, detune: 11, wave: 'triangle', width: 0.8 }
@@ -73,13 +74,13 @@ export const PRESETS = [
         }),
         // 1本だけユニゾン無し・デチューン 0・幅 0。厚い中に細い線が1本通る。
         // 見た目も変えてある（同じ種別でも選び直せる、という実演）。
-        v('drone', 0.64, 0.42, {
+        v('drone', 0.64, 0.4, {
           vol: 0.36, look: 'binary',
           common: { attack: 12, release: 8, drift: 0.2, tone: 0.1, reverbSend: 0.5, delaySend: 0.1 },
           params: { freq: 196, count: 1, detune: 0, wave: 'sine', width: 0 }
         }),
         // 一番下。軽く歪ませて、和音の足元だけ濁らせる。
-        v('drive', 0.5, 0.82, {
+        v('drive', 0.5, 0.9, {
           vol: 0.47,
           common: { attack: 12, release: 10, drift: 0.3, tone: -0.6, reverbSend: 0.2, delaySend: 0 },
           params: { freq: 33, drive: 0.28, filterPos: 'post', swellRate: 0.03, swellDepth: 6 }
@@ -145,7 +146,7 @@ export const PRESETS = [
       },
       voices: [
         // 土台も高いところに置く。ここを 50Hz 台にすると配置の性格が消える。
-        v('drone', 0.5, 0.34, {
+        v('drone', 0.5, 0.3, {
           vol: 0.6,
           common: { attack: 12, release: 8, drift: 0.35, tone: 0.2, reverbSend: 0.5, delaySend: 0.05 },
           params: { freq: 392, count: 2, detune: 6, wave: 'sine', width: 0.75 }
@@ -208,7 +209,7 @@ export const PRESETS = [
           params: { interval: 0.13, jitter: 22, grainLen: 80, shape: 0.25, center: 620, spread: 700, wave: 'noise', width: 0.95 }
         }),
         // 歪みは浅く。DRIVE を「軽く潰した土台」として使う例がひとつも無かった。
-        v('drive', 0.5, 0.76, {
+        v('drive', 0.5, 0.825, {
           vol: 0.35,
           common: { attack: 7, release: 6, drift: 0.3, tone: -0.45, reverbSend: 0.2, delaySend: 0 },
           params: { freq: 44, drive: 0.12, filterPos: 'post', swellRate: 0.04, swellDepth: 8 }
@@ -251,7 +252,7 @@ export const PRESETS = [
             index: 1.1, decay: 0.5, width: 0.6, trigger: 'orbit', hits: 3 }
         }),
         // ユニゾン1本・デチューン 0・幅 0。厚みのない、細いモノの土台。
-        v('drone', 0.5, 0.7, {
+        v('drone', 0.5, 0.75, {
           vol: 0.48,
           common: { attack: 4, release: 3, drift: 0.1, tone: -0.55, reverbSend: 0.2, delaySend: 0 },
           params: { freq: 98, count: 1, detune: 0, wave: 'square', width: 0 }
@@ -305,7 +306,7 @@ export const PRESETS = [
             index: 2.2, decay: 9, width: 0.8, trigger: 'orbit', hits: 2 }
         }),
         // 土台。ここが動くと打点の噛み合いが聞こえなくなるので、止めて暗く敷く
-        v('drone', 0.5, 0.66, {
+        v('drone', 0.5, 0.7, {
           vol: 0.72,
           common: { attack: 18, release: 10, drift: 0.35, tone: -0.35, reverbSend: 0.3, delaySend: 0 },
           params: { freq: 73, count: 3, detune: 9, wave: 'triangle', width: 0.6 }

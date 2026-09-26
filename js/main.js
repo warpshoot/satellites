@@ -10,6 +10,7 @@ import { ROOTS, SCALE_IDS } from './audio/music.js';
 import { createField } from './ui/field.js';
 import { createPanel, randomFor } from './ui/panel.js';
 import { createStrip } from './ui/strip.js';
+import { clampPos } from './world.js';
 
 const fieldEl = document.getElementById('field');
 const panelEl = document.getElementById('panel');
@@ -32,19 +33,13 @@ let pauseTimer = null;
 
 const TAU = Math.PI * 2;
 
-// 盤面は正方形ではないので、正円に「見える」軌道を描くには縦横比が要る。
-let aspect = 1;
-export function setAspect(a) {
-  if (a > 0) aspect = a;
-}
-
-// 面から浮く量。盤面の横幅 1 に対してどれだけ動かすか。
+// 面から浮く量。座標の 1 に対してどれだけ動かすか。
 const Z_GAIN = 0.85;
 
 // 距離の減衰の基準。この距離で音量がおよそ半分になる。
 const HALF = 0.32;
 
-// 軌道上の一点を、正規化座標の差分として返す。半径 rho は画面の横幅を 1 とした長さ。
+// 軌道上の一点を、核からの差分として返す。縦も横も同じ単位（world.js）。
 // 実際の軌道要素と同じ組み立て: 面の中で楕円を描き、傾斜で面ごと奥へ倒し、
 // 最後に向き（昇交点）で面の中を回す。
 function ellipsePoint(rho, ecc, angleDeg, inclDeg, theta) {
@@ -59,7 +54,7 @@ function ellipsePoint(rho, ecc, angleDeg, inclDeg, theta) {
   const pz = b * st * Math.sin(ic);
   return {
     x: px * Math.cos(ph) - py * Math.sin(ph),
-    y: (px * Math.sin(ph) + py * Math.cos(ph)) * aspect,
+    y: px * Math.sin(ph) + py * Math.cos(ph),
     z: pz * Z_GAIN
   };
 }
@@ -67,7 +62,7 @@ function ellipsePoint(rho, ecc, angleDeg, inclDeg, theta) {
 // 置いた位置から、半径と開始角を逆算する
 function orbitSeed(dx, dy, angleDeg) {
   const u = dx;
-  const w = dy / aspect;
+  const w = dy;
   const ph = (angleDeg * Math.PI) / 180;
   const ur = u * Math.cos(ph) + w * Math.sin(ph);
   const wr = -u * Math.sin(ph) + w * Math.cos(ph);
@@ -111,8 +106,6 @@ export function orbitClock(v, t) {
   return { theta: orbitState(v, t).theta, t, omega: (dir * TAU) / period };
 }
 
-const clamp01 = (v) => Math.min(1, Math.max(0, v));
-
 // 核は盤面のど真ん中に固定。動かないので、周回は常にここを回る。
 export const CENTER = { x: 0.5, y: 0.5 };
 
@@ -126,10 +119,10 @@ function resolve(v, t) {
   return { x: v.x, y: v.y, zOff: 0 };
 }
 
-// 核からの3次元距離。盤面は正方形でないので縦は縦横比で割って揃える。
+// 核からの3次元距離。画面の形は入らない（world.js）。
 export function coreDistance(pos) {
   const dx = pos.x - CENTER.x;
-  const dy = (pos.y - CENTER.y) / aspect;
+  const dy = pos.y - CENTER.y;
   const dz = pos.zOff || 0;
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
@@ -214,8 +207,8 @@ function rollNewVoice(V) {
   // 何本かは止めておく。全部が回っていると、動きの速さの差が読めない。
   if (Math.random() < 0.25) {
     const p = orbitState(data, engine.now());
-    data.x = clamp01(CENTER.x + p.x);
-    data.y = clamp01(CENTER.y + p.y);
+    data.x = clampPos(CENTER.x + p.x);
+    data.y = clampPos(CENTER.y + p.y);
     data.orbit = false;
   }
   return data;
@@ -313,8 +306,6 @@ const app = {
     field.layout();
   },
 
-  setAspect: (a) => setAspect(a),
-
   // 軌道の道筋。傾斜で面が倒れるので点列で返す。
   orbitPath(v, n) {
     if (!v.orbit) return null;
@@ -385,7 +376,7 @@ const app = {
 
   add(type, x, y) {
     if (!this.canAdd()) return this.notice('星は' + MAX_VOICES + '個まで');
-    const data = newVoiceData(type, clamp01(x), clamp01(y));
+    const data = newVoiceData(type, clampPos(x), clampPos(y));
     // 置いた場所から半径と位相を割り出す。位相は時刻を引いておかないと、
     // 置いた瞬間に軌道上の別の場所へ飛ぶ。
     if (data.orbit) {
@@ -406,7 +397,7 @@ const app = {
     const src = findVoice(id);
     if (!src) return;
     if (!this.canAdd()) return this.notice('星は' + MAX_VOICES + '個まで');
-    const data = newVoiceData(src.type, clamp01(src.x + 0.07), clamp01(src.y - 0.07));
+    const data = newVoiceData(src.type, clampPos(src.x + 0.07), clampPos(src.y - 0.07));
     data.orbit = src.orbit;
     data.vol = src.vol;
     data.look = src.look;
@@ -459,8 +450,8 @@ const app = {
       field.layout();
       return;
     }
-    v.x = clamp01(x);
-    v.y = clamp01(y);
+    v.x = clampPos(x);
+    v.y = clampPos(y);
     applyPos(v);
     field.layout();
   },
@@ -507,8 +498,8 @@ const app = {
     } else {
       // 外すときは、いま見えている場所に置いていく
       const pos = this.resolved(v);
-      v.x = clamp01(pos.x);
-      v.y = clamp01(pos.y);
+      v.x = clampPos(pos.x);
+      v.y = clampPos(pos.y);
       v.orbit = false;
     }
     applyPos(v);
@@ -832,6 +823,16 @@ function meterLoop() {
 requestAnimationFrame(meterLoop);
 
 window.addEventListener('resize', () => field.layout());
+
+// 横長の画面だけ、パネルを畳んで画面いっぱいを宇宙にできる。
+// 見ている場所の話なので保存はしない（タブと同じ）。
+const sideEl = document.getElementById('side');
+const sideToggleEl = document.getElementById('side-toggle');
+sideToggleEl.addEventListener('click', () => {
+  const closed = sideEl.classList.toggle('closed');
+  sideToggleEl.textContent = closed ? 'パネル' : '隠す';
+  field.hidePicker();
+});
 
 // iOS Safari はロックやバックグラウンドで suspend される
 // ---- 中断と復帰 -------------------------------------------------------

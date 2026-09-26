@@ -2,6 +2,7 @@ import { voiceClass } from './audio/voices/registry.js';
 import { LOOK_IDS, LOOK_LABELS, SKY_STYLES, SKY_LABELS } from './ui/looks.js';
 import { COMMON_DEFAULTS } from './audio/voices/base.js';
 import { ROOTS, SCALE_IDS, SCALE_LABELS, TUNING_DEFAULTS } from './audio/music.js';
+import { clampPos } from './world.js';
 
 // 同時に置ける星の数。DRONE を 3 本重ねると残り 5 で、それだと
 // 土台と質感と粒を同居させた時点で埋まる。実測のヘッドルームに余裕があるので
@@ -174,8 +175,8 @@ function sanitize(raw) {
     patch.voices.push({
       id: v.id || newVoiceData(v.type, 0.5, 0.5).id,
       type: v.type,
-      x: clamp01(num(v.x, 0.5)),
-      y: clamp01(num(v.y, 0.5)),
+      x: clampPos(num(v.x, 0.5)),
+      y: clampPos(num(v.y, 0.5)),
       look: LOOK_IDS.includes(v.look) ? v.look : V.look,
       vol: clamp01(num(v.vol != null ? v.vol : v.lum, 0.85)),
       // 旧版の「ゆらぎ」は周回として読み替える
