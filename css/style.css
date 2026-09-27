@@ -88,23 +88,6 @@ body {
   transition: width 0.12s linear, height 0.12s linear, opacity 0.12s linear;
 }
 
-/* 影。光源は核だけなので、核と反対の半分を落とす。形の記号の上に載せる。 */
-.dot-shade {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: linear-gradient(var(--away, 90deg), transparent 47%, rgba(4, 6, 10, 0.82) 53%);
-  opacity: var(--shade, 1);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* 中空は輪の半分だけを暗くする */
-.dot.look-hollow .dot-shade {
-  -webkit-mask-image: radial-gradient(closest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
-  mask-image: radial-gradient(closest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
-}
-
 .dot.grabbing { transition: none; }
 
 /* C 中空 */
@@ -151,9 +134,7 @@ body {
   width: 46%;
   height: 46%;
   border-radius: 50%;
-  background:
-    linear-gradient(var(--away, 90deg), transparent 47%, rgba(4, 6, 10, calc(0.82 * var(--shade, 1))) 53%),
-    color-mix(in srgb, var(--c) 70%, #fff);
+  background: color-mix(in srgb, var(--c) 70%, #fff);
   pointer-events: none;
 }
 
