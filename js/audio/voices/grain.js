@@ -177,6 +177,7 @@ export class GrainVoice extends Voice {
   }
 
   _spawn(t) {
+    this._hit(t);
     const ctx = this.ctx;
     // 音程は中心 ± 幅/2 から連続値で選び、そのあと音階へ寄せる。
     // 吸着なし（scale = なし）ならここは素通りする。

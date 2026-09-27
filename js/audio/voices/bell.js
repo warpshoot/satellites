@@ -120,6 +120,7 @@ export class BellVoice extends Voice {
   }
 
   _spawn(t) {
+    this._hit(t);
     const ctx = this.ctx;
     const cents = triangular() * this.params.spread / 2;
     const freq = quantize(this.params.center * Math.pow(2, cents / 1200), this.tuning);

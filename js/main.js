@@ -745,6 +745,11 @@ function applyPos(v) {
 
 function spawn(data) {
   const voice = createVoice(engine, data);
+  // 1発ごとの輪。パルスと同じく「音に合わせて星を動かす」側の見た目なので、同じ札に従う。
+  voice.onHit = (t) => {
+    if (paused || document.hidden || !state.patch.master.pulse || !app.audible(data.id)) return;
+    field.ripple(data.id, t - engine.ctx.currentTime);
+  };
   engine.addVoice(voice);
   live.set(data.id, voice);
   const t = engine.now();
@@ -880,6 +885,7 @@ async function ensureRunning() {
 }
 
 document.addEventListener('visibilitychange', () => {
+  syncWakeLock();
   if (document.visibilityState !== 'visible') return;
   ensureRunning();
 });
@@ -930,7 +936,90 @@ async function begin() {
 function setTransport() {
   transportEl.classList.toggle('playing', started && !paused);
   transportEl.classList.toggle('visible', started);
+  syncWakeLock();
+  touchIdle();
 }
+
+// ---- 画面を消さない --------------------------------------------------
+// 放置して聴く道具なのに、スマホは 30 秒ほどで画面を落とし、iOS はロックで音も止める。
+// 鳴っているあいだだけ画面を点けておく。止めたら手放す。
+// 画面が隠れると OS が勝手に手放すので、戻ってきたときに取り直す。
+// 持っていない環境（古い iOS など）では何もしない。
+let wakeLock = null;
+async function syncWakeLock() {
+  const want = started && !paused && document.visibilityState === 'visible';
+  if (!want) {
+    if (wakeLock) {
+      const w = wakeLock;
+      wakeLock = null;
+      w.release().catch(() => {});
+    }
+    return;
+  }
+  if (wakeLock || !navigator.wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (e) {
+    /* 省電力モードなどで断られる。鳴らすこと自体には関係ないので黙る。 */
+  }
+}
+
+// ---- 眺めているあいだは UI を引かせる ----------------------------------
+// しばらく触らないと、停止ボタンもパネルもゆっくり消えていく。触れば戻る。
+// 操作を隠すのではなく、眺めているあいだだけ控えてもらう。止めているあいだは
+// ▶ が出口なので引かせない。
+const IDLE_MS = 20000;
+const FADED = '#side, #transport, #side-toggle, .solo-bar';
+let idleTimer = null;
+
+function touchIdle() {
+  clearTimeout(idleTimer);
+  document.body.classList.remove('idle');
+  if (!started || paused) return;
+  idleTimer = setTimeout(() => {
+    if (!started || paused || !gateEl.classList.contains('gone')) return;
+    if (fieldEl.querySelector('.picker:not(.hidden), .ask:not(.hidden)')) return touchIdle();
+    document.body.classList.add('idle');
+  }, IDLE_MS);
+}
+
+// 消えている UI を叩いた最初の1回は、戻すだけにする。見えないノブを
+// 知らないうちに動かしたり、見えない停止ボタンを押したりしないように。
+// range は pointerdown を止めても値が動くので、消えているあいだは CSS で
+// 当たり判定ごと切ってある。指はその下（盤面）へ抜けるので、UI の場所に
+// 落ちた指はここで最後まで（離すまで）飲み込む。
+// それ以外の盤面はそのまま通す。宇宙を触ること自体が、このアプリの操作だから。
+function underFaded(x, y) {
+  for (const n of document.querySelectorAll(FADED)) {
+    const r = n.getBoundingClientRect();
+    if (r.width && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
+  }
+  return false;
+}
+let swallowing = false;
+window.addEventListener('pointerdown', (e) => {
+  const wasIdle = document.body.classList.contains('idle');
+  touchIdle();
+  if (wasIdle && underFaded(e.clientX, e.clientY)) {
+    swallowing = true;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
+for (const type of ['pointermove', 'pointerup', 'pointercancel', 'click']) {
+  window.addEventListener(type, (e) => {
+    if (!swallowing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (type === 'click' || type === 'pointercancel') swallowing = false;
+  }, true);
+}
+// マウスは触れずに動かせるので、動かしただけでも戻す
+window.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse') touchIdle();
+}, true);
+window.addEventListener('keydown', touchIdle, true);
 
 async function togglePlay() {
   if (!started) return;

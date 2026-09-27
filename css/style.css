@@ -153,6 +153,22 @@ body {
   outline-offset: 2px;
 }
 
+/* 鳴った瞬間の輪。光ではなく線だけ。星の後ろ、軌道の手前。 */
+#field .ripple {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--c);
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  animation: ripple 2.2s cubic-bezier(0.2, 0.6, 0.3, 1) forwards;
+}
+
+@keyframes ripple {
+  from { transform: scale(var(--from)); opacity: var(--o); }
+  to { transform: scale(1); opacity: 0; }
+}
+
 /* 軌道と結び */
 #field .links {
   position: absolute;
@@ -535,6 +551,22 @@ input[type=range]::-moz-range-thumb {
 
 .solo-bar.hidden { display: none; }
 
+/* ---- 眺めているあいだ ---- */
+/* 引くときはゆっくり、戻るときはすぐ。 */
+#transport,
+#side,
+#side-toggle,
+.solo-bar { transition: opacity 0.35s ease; }
+
+body.idle #transport,
+body.idle #side,
+body.idle #side-toggle,
+body.idle .solo-bar {
+  opacity: 0;
+  pointer-events: none; /* 見えないノブを叩かせない。最初の1回は main.js が起こすだけにする */
+  transition: opacity 4s ease;
+}
+
 /* ---- 通知 ---- */
 #notice {
   position: fixed;
@@ -640,14 +672,14 @@ input[type=range]::-moz-range-thumb {
     background: rgba(14, 16, 21, 0.32);
     -webkit-backdrop-filter: blur(2px);
     backdrop-filter: blur(2px);
-    transition: transform 0.28s ease, visibility 0s linear 0s;
+    transition: transform 0.28s ease, visibility 0s linear 0s, opacity 0.35s ease;
   }
   #side #stars,
   #side #panel { background: transparent; }
   #side.closed {
     transform: translateX(calc(100% + 24px));
     visibility: hidden;
-    transition: transform 0.28s ease, visibility 0s linear 0.28s;
+    transition: transform 0.28s ease, visibility 0s linear 0.28s, opacity 0.35s ease;
   }
 
   /* 畳む・開くは見えるボタンだけが持つ。盤面に見えない操作は置かない。
@@ -666,7 +698,7 @@ input[type=range]::-moz-range-thumb {
     padding: 7px 12px;
     border-radius: 999px;
     cursor: pointer;
-    transition: right 0.28s ease;
+    transition: right 0.28s ease, opacity 0.35s ease;
   }
   #side.closed + #side-toggle { right: 12px; color: var(--text); }
 }
