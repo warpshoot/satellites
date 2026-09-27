@@ -634,9 +634,12 @@ input[type=range]::-moz-range-thumb {
     border: 1px solid var(--line);
     border-radius: 14px;
     overflow: hidden;
-    background: rgba(14, 16, 21, 0.9);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
+    /* 裏の星と軌道が透けて見える程度に。0.5 だと星は見えても軌道の線が消えた。
+       ぼかしは軽くして、動いているのが分かるようにする。
+       文字が読めなくなる手前で止めてある。 */
+    background: rgba(14, 16, 21, 0.32);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
     transition: transform 0.28s ease, visibility 0s linear 0s;
   }
   #side #stars,
