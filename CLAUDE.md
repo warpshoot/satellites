@@ -433,6 +433,15 @@ tanh で寝かせ、k = 1 なら完全に素通し。
 **このリポジトリを読ませない前提**なので、値域も音階の中身も転記してある。
 パラメータの min/max を変えたら、このファイルも直すこと（直さないと静かに嘘になる）。
 
+**値域の検査はパラメータ定義から作る。** `sanitize()` が `COMMON_PARAMS` /
+`V.params` / `MASTER_PARAMS` / `ORBIT_PARAMS` の `min`・`max`・`scale`・`options`
+を読んで丸める（`coerceValue()` / `coerceByDefs()` / `coerceMaster()`）。
+以前は `params` と `common` を素通しにしていて、`attack: -5` を書いたパッチは
+`linearRampToValueAtTime` が `RangeError` を投げ、**その星が黙ったまま鳴らなかった**。
+`freq: 99999` は例外も出ずに無音。**値域を sanitize に書き写さないこと。**
+書き写すと、スライダで出せない値が持ち込みだけ通る側に必ずずれる。
+丸めたことは画面に出さない（読み込むたびにトーストが出るほうが邪魔）。
+
 ## 確かめ方
 
 推測で書かず、**実際に鳴らして測る**こと。ヘッドレス Chromium が使える。

@@ -1,6 +1,6 @@
 import { voiceClass } from './audio/voices/registry.js';
 import { LOOK_IDS, LOOK_LABELS, SKY_STYLES, SKY_LABELS } from './ui/looks.js';
-import { COMMON_DEFAULTS } from './audio/voices/base.js';
+import { COMMON_DEFAULTS, COMMON_PARAMS } from './audio/voices/base.js';
 import { ROOTS, SCALE_IDS, SCALE_LABELS, TUNING_DEFAULTS } from './audio/music.js';
 import { clampPos } from './world.js';
 
@@ -140,38 +140,19 @@ function emptyPatch() {
 function sanitize(raw) {
   const patch = emptyPatch();
   if (!raw || !(raw.version >= 1 && raw.version <= VERSION)) return patch;
-  const rt = (raw.master && raw.master.tuning) || {};
-  patch.master = {
-    gain: num(raw.master && raw.master.gain, MASTER_DEFAULTS.gain),
-    tuning: {
-      root: ROOTS.includes(rt.root) ? rt.root : TUNING_DEFAULTS.root,
-      scale: SCALE_IDS.includes(rt.scale) ? rt.scale : TUNING_DEFAULTS.scale,
-      drift: clamp01(num(rt.drift, TUNING_DEFAULTS.drift))
-    },
-    reverb: {
-      length: num(raw.master && raw.master.reverb && raw.master.reverb.length, MASTER_DEFAULTS.reverb.length),
-      decay: num(raw.master && raw.master.reverb && raw.master.reverb.decay, MASTER_DEFAULTS.reverb.decay)
-    },
-    delay: {
-      time: num(raw.master && raw.master.delay && raw.master.delay.time, MASTER_DEFAULTS.delay.time),
-      feedback: Math.min(0.85, num(raw.master && raw.master.delay && raw.master.delay.feedback, MASTER_DEFAULTS.delay.feedback)),
-      tone: clamp01(num(raw.master && raw.master.delay && raw.master.delay.tone, MASTER_DEFAULTS.delay.tone)),
-      wow: clamp01(num(raw.master && raw.master.delay && raw.master.delay.wow, MASTER_DEFAULTS.delay.wow)),
-      // 旧版のパッチはディレイ時間を自分で決めているので、勝手に周回へ合わせない
-      sync: raw.master && raw.master.delay && raw.master.delay.sync != null
-        ? !!raw.master.delay.sync
-        : raw.version >= 3 && MASTER_DEFAULTS.delay.sync
-    },
-    // 旧いパッチには無いので 0（素通し）に落ちる
-    burn: Math.min(1, Math.max(0, num(raw.master && raw.master.burn, MASTER_DEFAULTS.burn))),
-    pulse: raw.master && raw.master.pulse != null ? !!raw.master.pulse : true,
-    sky: raw.master && SKY_STYLES.includes(raw.master.sky) ? raw.master.sky : 'noise',
-    follow: !!(raw.master && raw.master.follow)
-  };
+  patch.master = coerceMaster(raw.master, raw.version);
   const voices = Array.isArray(raw.voices) ? raw.voices.slice(0, MAX_VOICES) : [];
   for (const v of voices) {
     const V = voiceClass(v.type);
     if (!v.type || V.type !== v.type) continue;
+    const orbit = coerceByDefs(ORBIT_PARAMS, v, {
+      orbitPeriod: Math.round(30 + Math.random() * 120), // 無ければ散らす。揃うと動きが噛み合う
+      orbitRadius: 0.3,
+      orbitEcc: 0,
+      orbitAngle: 0,
+      orbitIncl: 0,
+      orbitDir: 'prograde'
+    });
     patch.voices.push({
       id: v.id || newVoiceData(v.type, 0.5, 0.5).id,
       type: v.type,
@@ -181,15 +162,17 @@ function sanitize(raw) {
       vol: clamp01(num(v.vol != null ? v.vol : v.lum, 0.85)),
       // 旧版の「ゆらぎ」は周回として読み替える
       orbit: !!(v.orbit != null ? v.orbit : v.drift),
-      orbitPeriod: Math.min(600, Math.max(5, num(v.orbitPeriod, 30 + Math.random() * 120))),
-      orbitRadius: v.orbitRadius == null ? null : Math.min(2, Math.max(0.02, num(v.orbitRadius, 0.3))),
-      orbitPhase: num(v.orbitPhase, 0),
-      orbitDir: v.orbitDir === 'retrograde' ? 'retrograde' : 'prograde',
-      orbitEcc: Math.min(0.9, Math.max(0, num(v.orbitEcc, 0))),
+      // 周回は ORBIT_PARAMS が値域を持つ。半径だけは null（置いた場所から割り出す）を残す。
+      orbitPeriod: orbit.orbitPeriod,
+      orbitRadius: v.orbitRadius == null ? null : orbit.orbitRadius,
+      orbitPhase: num(v.orbitPhase, 0), // ラジアン。1周を越えても意味が変わらないので丸めない
+      orbitDir: orbit.orbitDir,
+      orbitEcc: orbit.orbitEcc,
+      // 向きは丸めずに回り込ませる。370° は 10° と同じ場所で、360° に潰すと嘘になる
       orbitAngle: ((num(v.orbitAngle, 0) % 360) + 360) % 360,
-      orbitIncl: Math.min(90, Math.max(0, num(v.orbitIncl, 0))),
-      common: Object.assign({}, COMMON_DEFAULTS, v.common || {}),
-      params: Object.assign({}, V.defaults, v.params || {})
+      orbitIncl: orbit.orbitIncl,
+      common: coerceByDefs(COMMON_PARAMS, v.common, COMMON_DEFAULTS),
+      params: coerceByDefs(V.params, v.params, V.defaults)
     });
   }
   return patch;
@@ -201,6 +184,49 @@ function num(v, fallback) {
 
 function clamp01(v) {
   return Math.min(1, Math.max(0, v));
+}
+
+// ---- パラメータ定義から値を作る関門 --------------------------------
+// 値域はパラメータ定義（min/max/scale/options）が1つだけ持ち、ここはそれを読む。
+// 書き写すと、スライダでは出せない値が持ち込みだけ通ってしまう。実際に通っていて、
+// アタックに負の値を書いたパッチは RangeError でその星が黙ったまま鳴らなかった。
+function coerceValue(def, raw, fallback) {
+  if (def.type === 'select') {
+    // ON/OFF の札は真偽値で持つ。旧いパッチが 1 / 0 で書いていても読めるようにする。
+    if (def.options.every((o) => typeof o === 'boolean')) return !!raw;
+    return def.options.some((o) => o === raw) ? raw : fallback;
+  }
+  const n = num(raw, NaN);
+  if (!isFinite(n)) return fallback;
+  const v = Math.min(def.max, Math.max(def.min, n));
+  return def.scale === 'int' ? Math.round(v) : v;
+}
+
+// 定義にある鍵だけを通す。知らない鍵は既定のまま（要らないノブを生やさない）。
+function coerceByDefs(defs, raw, defaults) {
+  const out = Object.assign({}, defaults);
+  if (!raw) return out;
+  for (const d of defs) {
+    if (raw[d.key] === undefined) continue;
+    out[d.key] = coerceValue(d, raw[d.key], defaults[d.key]);
+  }
+  return out;
+}
+
+// マスターは束を平らにした MASTER_PARAMS が `path` で場所を指す。
+function coerceMaster(raw, version) {
+  const m = JSON.parse(JSON.stringify(MASTER_DEFAULTS));
+  if (!raw) return m;
+  for (const d of MASTER_PARAMS) {
+    const v = getPath(raw, d.path);
+    if (v === undefined || v === null) continue;
+    setPath(m, d.path, coerceValue(d, v, getPath(m, d.path)));
+  }
+  // 旧版のパッチはディレイ時間を自分で決めているので、勝手に周回へ合わせない
+  if (!(raw.delay && raw.delay.sync != null)) {
+    m.delay.sync = version >= 3 && MASTER_DEFAULTS.delay.sync;
+  }
+  return m;
 }
 
 export const state = {
