@@ -19,11 +19,14 @@ const cam = { x: 0.5, y: 0.5 };
 
 // 縦も横も同じ縮尺で描く（world.js）。縮尺は「横 1、縦 Y_SPAN」が必ず収まる大きさで、
 // 余った面積は拡大には使わず、宇宙の続きとして見せる。
-// 横長の画面ではパネルが盤面に重なるので、中心は隠れていない部分の真ん中に取る。
+// 横長の画面ではパネルが盤面に重なるが、縮尺と中心はパネルに合わせて動かさない。
+// 動かすと、開け閉めのたびに宇宙が縮んで寄って、パネルのために場所を空けた絵になる。
+// パネルは宇宙の手前に浮いているだけ。vw（隠れていない幅）はピッカーや
+// ドラッグを見えている範囲に収めるためだけに使う。
 function viewOf(w, h, inset) {
   const vw = Math.max(1, w - inset);
-  const s = Math.min(vw, h / Y_SPAN);
-  return { cx: vw / 2, cy: h / 2, s, vw, h };
+  const s = Math.min(w, h / Y_SPAN);
+  return { cx: w / 2, cy: h / 2, s, vw, h };
 }
 
 export function project(x, y, view) {
@@ -49,11 +52,9 @@ export function createField(el, app) {
     return { x: p.x, y: p.y };
   }
 
-  // 横長の画面では、パネルが盤面の右に重なる。その幅だけ中心を左へ寄せる。
-  // 畳んだら 0 へ寄せていき、核がゆっくり画面の真ん中へ戻る。
+  // 横長の画面で、パネルが盤面の右に重なっている幅
   const side = document.getElementById('side');
-  let inset = null;
-  function insetTarget(width) {
+  function insetOf(width) {
     if (!side || side.classList.contains('closed')) return 0;
     if (getComputedStyle(side).position !== 'absolute') return 0;
     return Math.max(0, width - side.offsetLeft);
@@ -62,33 +63,21 @@ export function createField(el, app) {
   // いまの画面での投影。盤面の左上の画面座標も一緒に持つ。
   function frame() {
     const r = el.getBoundingClientRect();
-    if (inset == null) inset = insetTarget(r.width);
-    const f = viewOf(r.width, r.height, inset);
+    const f = viewOf(r.width, r.height, insetOf(r.width));
     f.left = r.left;
     f.top = r.top;
     f.width = r.width;
     return f;
   }
 
-  function stepInset() {
-    const t = insetTarget(el.clientWidth);
-    if (inset == null || Math.abs(t - inset) < 0.5) {
-      inset = t;
-      return false;
-    }
-    inset += (t - inset) * 0.35;
-    return true;
-  }
-
   function stepCamera() {
-    const sliding = stepInset();
     const t = cameraTarget();
     const dx = t.x - cam.x;
     const dy = t.y - cam.y;
     if (Math.abs(dx) < 0.0004 && Math.abs(dy) < 0.0004) {
       cam.x = t.x;
       cam.y = t.y;
-      return sliding;
+      return false;
     }
     cam.x += dx * 0.25;
     cam.y += dy * 0.25;
