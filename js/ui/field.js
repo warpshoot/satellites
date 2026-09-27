@@ -390,6 +390,40 @@ export function createField(el, app) {
     links.innerHTML = parts.join('');
   }
 
+  // 鳴った瞬間に星から広がる輪。光らせるのではなく、水面に落ちた雫の跡。
+  // 星が動いても輪はその場に残す。鳴った場所が一瞬だけ見える。
+  // 大きさと濃さは見かけの明るさ（近さ × 音量）から取る。遠くの一発は小さく淡い。
+  const RIPPLE_MAX = 24; // 同時に出ている輪の上限。BELL を並べても重くしない
+  let ripples = 0;
+  function ripple(id, delay) {
+    setTimeout(() => {
+      const v = app.find(id);
+      if (!v || ripples >= RIPPLE_MAX) return;
+      const f = frame();
+      const k = dotScale(f);
+      const a = app.apparentOf(v);
+      const r = dotRadius(a, k);
+      const R = r + (14 + 34 * a) * k;
+      const pos = app.effectivePos(v);
+      const pt = project(pos.x, pos.y, f);
+      const ring = document.createElement('div');
+      ring.className = 'ripple';
+      ring.style.width = 2 * R + 'px';
+      ring.style.height = 2 * R + 'px';
+      ring.style.left = pt.sx - R + 'px';
+      ring.style.top = pt.sy - R + 'px';
+      ring.style.setProperty('--c', lookOf(v.look).c);
+      ring.style.setProperty('--from', (r / R).toFixed(3));
+      ring.style.setProperty('--o', (0.3 + 0.5 * app.nearOf(v)).toFixed(3));
+      ripples++;
+      ring.addEventListener('animationend', () => {
+        ring.remove();
+        ripples--;
+      });
+      el.appendChild(ring);
+    }, Math.max(0, delay * 1000));
+  }
+
   // 出音の実測から丸を膨らませる
   function setPulse(id, level) {
     const d = dots.get(id);
@@ -398,5 +432,5 @@ export function createField(el, app) {
     d.body.style.setProperty('--lift', (1 + level * 0.22).toFixed(3));
   }
 
-  return { render, layout, hidePicker, setPulse, askDelete, stepCamera };
+  return { render, layout, hidePicker, setPulse, ripple, askDelete, stepCamera };
 }

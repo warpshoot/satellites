@@ -46,6 +46,9 @@ const SLOW_RATIO = 4.83;
 // 「暗いか、もっと暗いか」でしかなくなる。低域と高域を逆向きに動かす。
 export const TILT_DB = 9;
 
+// 打点として輪を出す最短の間隔（秒）。これより詰まった発音は質感として扱う。
+const HIT_GAP = 0.35;
+
 // ピッチのばらつき用。一様乱数だと 2400cent が 2 オクターブへ平らに散って、
 // 旋律ではなく散弾になる。中心に寄せると、離れた音はたまに出る「跳び」になる。
 export function triangular() {
@@ -302,6 +305,16 @@ export class Voice {
       g2.setValueAtTime(0, t2);
       g2.linearRampToValueAtTime(1, t2 + 0.08);
     }, 60);
+  }
+
+  // 1発鳴らすたびに _spawn から呼ぶ。盤面はこれで、鳴った瞬間に星から輪を出す。
+  // 粒が詰まっているときは出さない。GRAIN の 0.05 秒間隔で毎回出すと輪の洪水になり、
+  // 「一発」ではなく質感として鳴っているものまで打点に見えてしまう。
+  // 前の発音から HIT_GAP 以上空いたものだけを「一発」とみなす。
+  _hit(t) {
+    const gap = t - (this._lastHit != null ? this._lastHit : -Infinity);
+    this._lastHit = t;
+    if (gap >= HIT_GAP && this.onHit) this.onHit(t);
   }
 
   // 立ち上がりは即、減衰はゆっくり。目で追える速さにする。
