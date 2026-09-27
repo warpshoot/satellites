@@ -225,6 +225,9 @@ export function createField(el, app) {
     dot.dataset.id = v.id;
     const body = document.createElement('span');
     body.className = 'dot-body';
+    const shade = document.createElement('span');
+    shade.className = 'dot-shade';
+    body.appendChild(shade);
     dot.appendChild(body);
     bindDot(dot, v.id);
     el.appendChild(dot);
@@ -338,6 +341,7 @@ export function createField(el, app) {
   function layout() {
     const f = frame();
     const k = dotScale(f);
+    const core = project(0.5, 0.5, f);
     soloBar.style.left = f.cx + 'px';
     for (const v of app.voices()) {
       const d = dots.get(v.id);
@@ -354,6 +358,11 @@ export function createField(el, app) {
       d.body.style.opacity = (0.4 + 0.58 * app.nearOf(v)).toFixed(3);
       const pt = project(pos.x, pos.y, f);
       d.el.style.transform = 'translate(' + (pt.sx - hit / 2) + 'px,' + (pt.sy - hit / 2) + 'px)';
+      // 光るのは核だけなので、核と反対の半分を影にする。真上から見ているので境目は直線。
+      const dx = core.sx - pt.sx;
+      const dy = core.sy - pt.sy;
+      d.body.style.setProperty('--shade', dx * dx + dy * dy < 1 ? '0' : '1');
+      d.body.style.setProperty('--away', Math.atan2(-dx, dy).toFixed(3) + 'rad');
     }
     layoutLinks(f, k);
   }
